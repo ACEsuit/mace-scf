@@ -1,9 +1,3 @@
-###########################################################################################
-#
-#     replace AtomicData to allow for extra fields
-#
-###########################################################################################
-
 from typing import Optional, Sequence
 
 import torch.utils.data
