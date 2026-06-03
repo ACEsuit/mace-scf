@@ -10,7 +10,7 @@ electrostatics-specific losses. Please read the documentation before trainnig or
 
 ## Development Status
 
-We are still adding some key features to the repo. Most importantly, for results in the preprint, the **Energy Functional SCF** model is still being cleaned up/documented.
+We are still adding some key features to the repo. Non-SCF models like the local split charge MACE can be used, but SCF models are still lacking documentation. For results in the preprint, the **Energy Functional SCF** model is still being cleaned up.
 
 ### Requirements
 
