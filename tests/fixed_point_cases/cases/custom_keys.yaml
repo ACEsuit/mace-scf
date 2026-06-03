@@ -1,0 +1,6 @@
+name: custom_keys
+description: Use the non-default multipole and Fermi-level keys present in the fixed-point fixtures.
+
+keys:
+  atomic_multipoles_key: some_multipoles
+  fermi_level_key: the_VBM

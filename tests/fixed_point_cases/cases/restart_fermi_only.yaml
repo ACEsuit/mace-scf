@@ -1,0 +1,14 @@
+name: restart_fermi_only
+description: Restart case reusing only the previous Fermi level in constant-charge mode.
+usage: restart
+
+inputs:
+  xyz: tests/fixtures/configs/mixed_test_configs.xyz
+  index: "0"
+
+calculator_options:
+  restart_density: false
+  restart_fermi_level: true
+
+scf_options:
+  constant_charge: true

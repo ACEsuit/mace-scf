@@ -1,0 +1,36 @@
+calculator: MACEFixedPointSCF
+usage: single_point
+model:
+  name: fixedpoint_l1_stage2
+inputs:
+  xyz: input.xyz
+  index: ':'
+keys:
+  atomic_multipoles_key: DMA_coeficients
+  fermi_level_key: fermi_level
+  external_field_key: external_field
+  total_charge_key: total_charge
+calculator_options:
+  use_pbc_evaluator: false
+  ignore_nonconverged: false
+  save_full_scf_history: false
+  restart_density: false
+  restart_fermi_level: false
+scf_options:
+  constant_charge: false
+  mixing_parameter: 0.2
+  num_scf_steps: 100
+  scf_tolerance: 1.0e-05
+checks:
+  expected_outputs:
+  - energy
+  - forces
+  - density_coefficients
+  - dipole
+  - fermi_level
+  - electrostatic_energy
+  - electron_energy
+  - num_scf_steps
+name: constant_fermi_baseline
+description: Baseline fixed-point calculator case in constant-Fermi mode.
+materialized_from: tests/fixed_point_cases/cases/constant_fermi_baseline.yaml

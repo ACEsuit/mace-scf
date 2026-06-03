@@ -1,0 +1,11 @@
+name: restart_both
+description: Sequential restart case reusing both charge density and Fermi level.
+usage: restart
+
+inputs:
+  xyz: tests/fixtures/configs/mixed_test_configs.xyz
+  index: "0"
+
+calculator_options:
+  restart_density: true
+  restart_fermi_level: true

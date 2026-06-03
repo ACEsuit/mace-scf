@@ -1,0 +1,194 @@
+2026-06-03 13:06:25.607 INFO: MACE version: 0.3.14
+2026-06-03 13:06:25.607 INFO: Using CPU
+2026-06-03 13:06:25.607 INFO: Configuration: Namespace(config='/private/var/folders/0k/0rk06dd95v78tmrfgbm10l780000gn/T/pytest-of-will/pytest-63/test_run_train_default_metrics0/default_mace_metrics/config.yaml', name='default_mace_metrics', seed=5, work_dir='/private/var/folders/0k/0rk06dd95v78tmrfgbm10l780000gn/T/pytest-of-will/pytest-63/test_run_train_default_metrics0/default_mace_metrics', log_dir='/private/var/folders/0k/0rk06dd95v78tmrfgbm10l780000gn/T/pytest-of-will/pytest-63/test_run_train_default_metrics0/default_mace_metrics/logs', model_dir='/private/var/folders/0k/0rk06dd95v78tmrfgbm10l780000gn/T/pytest-of-will/pytest-63/test_run_train_default_metrics0/default_mace_metrics', checkpoints_dir='/private/var/folders/0k/0rk06dd95v78tmrfgbm10l780000gn/T/pytest-of-will/pytest-63/test_run_train_default_metrics0/default_mace_metrics/checkpoints', results_dir='/private/var/folders/0k/0rk06dd95v78tmrfgbm10l780000gn/T/pytest-of-will/pytest-63/test_run_train_default_metrics0/default_mace_metrics/results', downloads_dir='/private/var/folders/0k/0rk06dd95v78tmrfgbm10l780000gn/T/pytest-of-will/pytest-63/test_run_train_default_metrics0/default_mace_metrics/downloads', device='cpu', default_dtype='float64', distributed=False, launcher='slurm', log_level='INFO', plot=True, plot_frequency=0, plot_interaction_e=False, r_max=4.5, radial_type='bessel', num_radial_basis=8, num_cutoff_basis=5, pair_repulsion=False, distance_transform='None', apply_cutoff=True, use_last_readout_only=False, use_embedding_readout=False, interaction='RealAgnosticResidualInteractionBlock', interaction_first='RealAgnosticResidualInteractionBlock', max_ell=3, correlation=3, use_reduced_cg=False, use_so3=False, use_agnostic_product=False, num_interactions=1, MLP_irreps='16x0e', radial_MLP='[64, 64, 64]', hidden_irreps='4x0e+4x1o', edge_irreps=None, num_channels=None, max_L=None, gate='silu', scaling='rms_forces_scaling', avg_num_neighbors=1, compute_avg_num_neighbors=True, compute_stress=False, compute_forces=True, train_file='/private/var/folders/0k/0rk06dd95v78tmrfgbm10l780000gn/T/pytest-of-will/pytest-63/test_run_train_default_metrics0/default_mace_metrics/water_clusters.xyz', valid_file=None, valid_fraction=0.25, test_file=None, test_dir=None, multi_processed_test=False, num_workers=0, pin_memory=True, atomic_numbers=None, mean=None, std=None, statistics_file=None, les_arguments=None, E0s='{1: -12.6746244439181, 8: -2041.03979050724}', pseudolabel_replay=False, foundation_filter_elements=True, multiheads_finetuning=True, foundation_head=None, weight_pt_head=1.0, real_pt_data_ratio_threshold=0.1, num_samples_pt=10000, force_mh_ft_lr=False, subselect_pt='random', filter_type_pt='none', allow_random_padding_pt=True, pt_train_file=None, pt_valid_file=None, foundation_model_elements=False, keep_isolated_atoms=False, energy_key=None, forces_key=None, virials_key=None, stress_key=None, dipole_key=None, polarizability_key=None, head_key=None, charges_key=None, elec_temp_key=None, total_spin_key=None, total_charge_key=None, embedding_specs=None, skip_evaluate_heads='pt_head', forces_weight=100.0, swa_forces_weight=100.0, energy_weight=1.0, swa_energy_weight=1000.0, virials_weight=1.0, swa_virials_weight=10.0, stress_weight=1.0, swa_stress_weight=10.0, dipole_weight=1.0, swa_dipole_weight=1.0, swa_polarizability_weight=1.0, polarizability_weight=1.0, config_type_weights={'Default': 1.0}, huber_delta=0.01, beta=0.9, batch_size=2, valid_batch_size=2, lr=0.01, swa_lr=0.001, weight_decay=5e-07, amsgrad=True, scheduler='ReduceLROnPlateau', lr_factor=0.8, scheduler_patience=50, lr_scheduler_gamma=0.9993, swa=False, start_swa=None, lbfgs=False, ema=True, ema_decay=0.99, max_num_epochs=1, patience=1000, foundation_model=None, foundation_model_readout=True, eval_interval=1, keep_checkpoints=False, save_all_checkpoints=False, save_cpu=False, clip_grad=10.0, dry_run=False, enable_cueq=False, only_cueq=False, enable_oeq=False, wandb=False, wandb_dir=None, wandb_project='', wandb_entity='', wandb_name='', wandb_log_hypers=['num_channels', 'max_L', 'correlation', 'lr', 'swa_lr', 'weight_decay', 'batch_size', 'max_num_epochs', 'start_swa', 'energy_weight', 'forces_weight'], atomic_multipoles_key=None, electrostatic_potentials_key=None, external_field_key=None, fermi_level_key=None, include_local_electron_energy=True, atomic_multipoles_max_l=1, atomic_multipoles_smearing_width=1.5, kspace_cutoff_factor=1.0, atomic_formal_charges='{1: 1.0, 8: -2.0}', formal_charges_from_data=False, field_feature_max_l=1, field_feature_widths='[1.0, 2.0]', dont_include_pbc_corrections=False, include_electrostatic_self_interaction=True, valid_set_seed=5, quadrupole_feature_corrections=False, electrostatic_pbc_method='mixed_periodic', static_bond_transfer_block='NoFieldSymmetricPredictionSourceBlock', oxidation_state_mixer='SumOxidationStateMixer', return_electrostatic_potentials=False, train_schedule=[{'name': 'stage1', 'start': 0, 'end': 1, 'loss': {'energy_per_atom': {'weight': 1.0}, 'forces': {'weight': 10.0}}, 'lr': 0.01}], fixedpoint_update_config={'type': <class 'mace_scf.electrostatics.field_blocks.OneBodyVariableUpdate'>, 'potential_embedding_cls': <class 'mace_scf.electrostatics.field_blocks.BiasedLinearPotentialEmbedding'>, 'nonlinearity_cls': <class 'mace_scf.electrostatics.field_blocks.NoNonLinearity'>}, field_readout_config={'type': <class 'mace_scf.electrostatics.field_blocks.StrictQuadraticFieldEnergyReadout'>}, field_block_weight_decay=5e-07, local_charges_weight_decay=5e-07, field_feature_norms='None', fermi_level_offset=None, field_norm_factor=1.0, oxidation_state_range='(-6.0, 6.0)', polarizable_charges=False, beta_two=0.999, log_on_test_sets=False, skip_scf_convergence_summary=False, use_linear_final_readout=False, include_field_si=False, use_linear_local_charges=False, atom_density_scaling='None', allow_low_density_pbc=False, override_pbc_checks=False, low_density_pbc_max_volume_per_atom=100.0, wandb_watch='off', wandb_watch_log_freq=50, debug_log_grad_summary=False, heads={'DFT': {'info_keys': {'energy': 'AIMS_energy', 'dipole': 'AIMS_dipole', 'stress': 'none', 'total_charge': 'total_charge', 'head': 'head'}, 'arrays_keys': {'forces': 'AIMS_forces', 'atomic_multipoles': 'AIMS_atom_multipoles'}}}, error_table='PerAtomRMSE', compute_polarizability=True, restart_latest=True, model='MACE', optimizer='schedulefree', qeq_charges='autograd', train_hardness=False, read_enegs=False, read_hardness=False, enegs_key=None, default_hardness=2.0)
+2026-06-03 13:06:25.607 INFO: Using the key specifications to parse data:
+2026-06-03 13:06:25.607 INFO: KeySpecification(info_keys={'energy': 'AIMS_energy', 'dipole': 'AIMS_dipole', 'stress': 'none', 'total_charge': 'total_charge', 'head': 'head'}, arrays_keys={'forces': 'AIMS_forces', 'atomic_multipoles': 'AIMS_atom_multipoles'})
+2026-06-03 13:06:25.767 INFO: Training set 1/1 [energy: 200, dipole components: 600, stress: 0, total_charge: 200, head: 200, forces: 200, atomic_multipoles: 200]
+2026-06-03 13:06:25.767 INFO: Total Training set [energy: 200, dipole components: 600, stress: 0, total_charge: 200, head: 200, forces: 200, atomic_multipoles: 200]
+2026-06-03 13:06:25.767 INFO: No validation set provided, splitting training data instead.
+2026-06-03 13:06:25.768 INFO: Using random 25% of training set for validation with indices saved in: /private/var/folders/0k/0rk06dd95v78tmrfgbm10l780000gn/T/pytest-of-will/pytest-63/test_run_train_default_metrics0/default_mace_metrics/valid_indices_5.txt
+2026-06-03 13:06:25.768 INFO: Random Split Training set [energy: 150, dipole components: 450, stress: 0, total_charge: 150, head: 150, forces: 150, atomic_multipoles: 150]
+2026-06-03 13:06:25.768 INFO: Random Split Validation set [energy: 50, dipole components: 150, stress: 0, total_charge: 50, head: 50, forces: 50, atomic_multipoles: 50]
+2026-06-03 13:06:25.768 INFO: Total number of configurations: train=150, valid=50, tests=[]
+2026-06-03 13:06:25.769 INFO: AtomicNumberTable: (1, 8)
+2026-06-03 13:06:25.769 INFO: Isolated Atomic Energies (E0s) not in training file, using command line argument
+2026-06-03 13:06:25.908 INFO: Atomic energies: [-12.6746244439181, -2041.03979050724]
+2026-06-03 13:06:26.016 INFO: Average number of neighbors: 11.802930402930404
+2026-06-03 13:06:26.017 INFO: computed Fermi level offset 0.0
+2026-06-03 13:06:26.018 INFO: using Fermi level offset 0.0
+2026-06-03 13:06:26.018 INFO: using normalization for field features None
+2026-06-03 13:06:26.018 INFO: using atom density scaling factors [1. 1.]
+2026-06-03 13:06:26.018 INFO: Building model
+2026-06-03 13:06:26.018 INFO: Hidden irreps: 4x0e+4x1o
+2026-06-03 13:06:26.503 INFO: ScheduleFree optimizer selected; LR scheduler options are ignored.
+2026-06-03 13:06:26.503 WARNING: Cannot find checkpoint with tag 'default_mace_metrics_run-5_stage1' in '/private/var/folders/0k/0rk06dd95v78tmrfgbm10l780000gn/T/pytest-of-will/pytest-63/test_run_train_default_metrics0/default_mace_metrics/checkpoints'
+2026-06-03 13:06:26.504 INFO: MACE(
+  (node_embedding): LinearNodeEmbeddingBlock(
+    (linear): Linear(2x0e -> 4x0e | 8 weights)
+  )
+  (radial_embedding): RadialEmbeddingBlock(
+    (bessel_fn): BesselBasis(r_max=4.5, num_basis=8, trainable=False)
+    (cutoff_fn): PolynomialCutoff(p=5, r_max=4.5)
+  )
+  (spherical_harmonics): SphericalHarmonics()
+  (atomic_energies_fn): AtomicEnergiesBlock(energies=[[-12.6746, -2041.0398]])
+  (interactions): ModuleList(
+    (0): RealAgnosticResidualInteractionBlock(
+      (linear_up): Linear(4x0e -> 4x0e | 16 weights)
+      (conv_tp): TensorProduct(4x0e x 1x0e+1x1o+1x2e+1x3o -> 4x0e+4x1o+4x2e+4x3o | 16 paths | 16 weights)
+      (conv_tp_weights): FullyConnectedNet[8, 64, 64, 64, 16]
+      (linear): Linear(4x0e+4x1o+4x2e+4x3o -> 4x0e+4x1o+4x2e+4x3o | 64 weights)
+      (skip_tp): FullyConnectedTensorProduct(4x0e x 2x0e -> 4x0e+4x1o | 32 paths | 32 weights)
+      (reshape): reshape_irreps()
+    )
+  )
+  (products): ModuleList(
+    (0): EquivariantProductBasisBlock(
+      (symmetric_contractions): SymmetricContraction(
+        (contractions): ModuleList(
+          (0): Contraction(
+            (contractions_weighting): ModuleList(
+              (0-1): 2 x GraphModule()
+            )
+            (contractions_features): ModuleList(
+              (0-1): 2 x GraphModule()
+            )
+            (weights): ParameterList(
+                (0): Parameter containing: [torch.float64 of size 2x4x4]
+                (1): Parameter containing: [torch.float64 of size 2x1x4]
+            )
+            (graph_opt_main): GraphModule()
+          )
+          (1): Contraction(
+            (contractions_weighting): ModuleList(
+              (0-1): 2 x GraphModule()
+            )
+            (contractions_features): ModuleList(
+              (0-1): 2 x GraphModule()
+            )
+            (weights): ParameterList(
+                (0): Parameter containing: [torch.float64 of size 2x6x4]
+                (1): Parameter containing: [torch.float64 of size 2x1x4]
+            )
+            (graph_opt_main): GraphModule()
+          )
+        )
+      )
+      (linear): Linear(4x0e+4x1o -> 4x0e+4x1o | 32 weights)
+    )
+  )
+  (readouts): ModuleList(
+    (0): LinearReadoutBlock(
+      (linear): Linear(4x0e+4x1o -> 1x0e | 4 weights)
+    )
+  )
+)
+2026-06-03 13:06:26.505 INFO: Number of parameters: 10572
+2026-06-03 13:06:26.505 INFO: Optimizer: AdamWScheduleFree (
+Parameter Group 0
+    betas: (0.9, 0.999)
+    eps: 1e-08
+    foreach: True
+    k: 0
+    lr: 0.01
+    lr_max: -1.0
+    name: embedding
+    r: 0.0
+    scheduled_lr: 0.0
+    train_mode: False
+    warmup_steps: 0
+    weight_decay: 0.0
+    weight_lr_power: 2.0
+    weight_sum: 0.0
+
+Parameter Group 1
+    betas: (0.9, 0.999)
+    eps: 1e-08
+    foreach: True
+    k: 0
+    lr: 0.01
+    lr_max: -1.0
+    name: interactions_decay
+    r: 0.0
+    scheduled_lr: 0.0
+    train_mode: False
+    warmup_steps: 0
+    weight_decay: 5e-07
+    weight_lr_power: 2.0
+    weight_sum: 0.0
+
+Parameter Group 2
+    betas: (0.9, 0.999)
+    eps: 1e-08
+    foreach: True
+    k: 0
+    lr: 0.01
+    lr_max: -1.0
+    name: interactions_no_decay
+    r: 0.0
+    scheduled_lr: 0.0
+    train_mode: False
+    warmup_steps: 0
+    weight_decay: 0.0
+    weight_lr_power: 2.0
+    weight_sum: 0.0
+
+Parameter Group 3
+    betas: (0.9, 0.999)
+    eps: 1e-08
+    foreach: True
+    k: 0
+    lr: 0.01
+    lr_max: -1.0
+    name: products
+    r: 0.0
+    scheduled_lr: 0.0
+    train_mode: False
+    warmup_steps: 0
+    weight_decay: 5e-07
+    weight_lr_power: 2.0
+    weight_sum: 0.0
+
+Parameter Group 4
+    betas: (0.9, 0.999)
+    eps: 1e-08
+    foreach: True
+    k: 0
+    lr: 0.01
+    lr_max: -1.0
+    name: readouts
+    r: 0.0
+    scheduled_lr: 0.0
+    train_mode: False
+    warmup_steps: 0
+    weight_decay: 0.0
+    weight_lr_power: 2.0
+    weight_sum: 0.0
+)
+2026-06-03 13:06:26.505 INFO: WeightedLoss(energy_per_atom_weight=1.0, forces_weight=10.0, )
+2026-06-03 13:06:26.505 INFO: Setting global learning rate to 0.01
+2026-06-03 13:06:26.505 WARNING: Cannot find checkpoint with tag 'default_mace_metrics_run-5_stage1' in '/private/var/folders/0k/0rk06dd95v78tmrfgbm10l780000gn/T/pytest-of-will/pytest-63/test_run_train_default_metrics0/default_mace_metrics/checkpoints'
+2026-06-03 13:06:26.505 INFO: Using gradient clipping with tolerance=10.000
+2026-06-03 13:06:29.839 INFO: Epoch 0: loss=4.3992, RMSE_E_per_atom=1308.6 meV, RMSE_F=519.1 meV / A
+2026-06-03 13:06:32.474 INFO: Epoch 1: loss=1.5144, RMSE_E_per_atom=720.9 meV, RMSE_F=312.8 meV / A
+2026-06-03 13:06:32.489 INFO: Training complete
+2026-06-03 13:06:32.490 INFO: Computing metrics for training, validation, and test sets
+2026-06-03 13:06:32.490 INFO: Computing final error tables and saving models
+2026-06-03 13:06:32.490 INFO: Loading checkpoint: /private/var/folders/0k/0rk06dd95v78tmrfgbm10l780000gn/T/pytest-of-will/pytest-63/test_run_train_default_metrics0/default_mace_metrics/checkpoints/default_mace_metrics_run-5_stage1_epoch-1.pt
+2026-06-03 13:06:32.495 INFO: Loaded model from epoch 1
+2026-06-03 13:06:32.495 INFO: Evaluating train ...
+2026-06-03 13:06:33.620 INFO: Evaluating valid ...
+2026-06-03 13:06:33.986 INFO: 
+Final error table for stage stage1
+2026-06-03 13:06:33.987 INFO: 
++-------------+---------------------+------------------+-------------------+
+| config_type | RMSE E / meV / atom | RMSE F / meV / A | relative F RMSE % |
++-------------+---------------------+------------------+-------------------+
+|    train    |        671.25       |      309.44      |       34.68       |
+|    valid    |        720.95       |      312.84      |       34.33       |
++-------------+---------------------+------------------+-------------------+
+2026-06-03 13:06:33.987 INFO: Saving model to /private/var/folders/0k/0rk06dd95v78tmrfgbm10l780000gn/T/pytest-of-will/pytest-63/test_run_train_default_metrics0/default_mace_metrics/checkpoints/default_mace_metrics_run-5_stage1.model
+2026-06-03 13:06:34.042 INFO: Computing SCF convergence summaries
+2026-06-03 13:06:34.043 INFO: Loading checkpoint: /private/var/folders/0k/0rk06dd95v78tmrfgbm10l780000gn/T/pytest-of-will/pytest-63/test_run_train_default_metrics0/default_mace_metrics/checkpoints/default_mace_metrics_run-5_stage1_epoch-1.pt
+2026-06-03 13:06:34.047 INFO: Loaded model from epoch 1 for SCF convergence summary stage stage1
+2026-06-03 13:06:34.047 INFO: Done

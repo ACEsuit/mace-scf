@@ -1,0 +1,9 @@
+name: ignore_nonconverged
+description: Allow a likely non-converged SCF run to complete without raising.
+
+calculator_options:
+  ignore_nonconverged: true
+
+scf_options:
+  num_scf_steps: 2
+  scf_tolerance: 1.0e-12

@@ -1,0 +1,9 @@
+name: constant_q_slab
+description: Constant-charge slab case with pbc TTF.
+
+scf_options:
+  constant_charge: true
+
+inputs:
+  xyz: tests/fixtures/configs/slab_test_configs.xyz
+  index: ":"

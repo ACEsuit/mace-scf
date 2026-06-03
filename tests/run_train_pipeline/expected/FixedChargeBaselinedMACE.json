@@ -1,0 +1,983 @@
+{
+  "case": {
+    "model": "FixedChargeBaselinedMACE",
+    "name": "default_fixedchargebaselinedmace_metrics"
+  },
+  "config": {
+    "E0s": "{1: -12.6746244439181, 8: -2041.03979050724}",
+    "atomic_multipoles_max_l": 1,
+    "batch_size": 2,
+    "error_table": "EnergyDensityDipoleRMSE",
+    "hidden_irreps": "4x0e+4x1o",
+    "kspace_cutoff_factor": 1.0,
+    "num_interactions": 1,
+    "optimizer": "schedulefree",
+    "r_max": 4.5,
+    "seed": 5,
+    "train_schedule": {
+      "0": {
+        "end": 1,
+        "loss": {
+          "dipole_per_atom": 1.0,
+          "energy_per_atom": 1.0,
+          "forces": 10.0
+        },
+        "lr": 0.01,
+        "name": "stage1",
+        "start": 0
+      }
+    },
+    "valid_batch_size": 2
+  },
+  "data": {
+    "atomic_energies": [
+      -12.6746244439181,
+      -2041.03979050724
+    ],
+    "avg_num_neighbors": 11.802930402930404,
+    "train_count": 150,
+    "valid_count": 50,
+    "z_table": [
+      1,
+      8
+    ]
+  },
+  "final_error_table": {
+    "columns": [
+      "config_type",
+      "RMSE E / meV / atom",
+      "RMSE F / meV / A",
+      "relative F RMSE %",
+      "RMSE DMA / e A^l",
+      "RMSE dipole / eA / atom",
+      "relative dipole RMSE %",
+      "polarizability / me A^2 / V"
+    ],
+    "rows": [
+      {
+        "RMSE DMA / e A^l": 1370.97,
+        "RMSE E / meV / atom": 791.53,
+        "RMSE F / meV / A": 405.9,
+        "RMSE dipole / eA / atom": 87.06,
+        "config_type": "train",
+        "polarizability / me A^2 / V": "not found",
+        "relative F RMSE %": 45.49,
+        "relative dipole RMSE %": 24.08
+      },
+      {
+        "RMSE DMA / e A^l": 1370.52,
+        "RMSE E / meV / atom": 754.32,
+        "RMSE F / meV / A": 404.6,
+        "RMSE dipole / eA / atom": 80.68,
+        "config_type": "valid",
+        "polarizability / me A^2 / V": "not found",
+        "relative F RMSE %": 44.4,
+        "relative dipole RMSE %": 24.32
+      }
+    ]
+  },
+  "metrics": [
+    {
+      "epoch": 0,
+      "loss": 29.152850854705182,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 32.943949937622264,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 37.2163320255137,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 23.661504455612256,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 30.273363692275375,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 27.600170859623645,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 26.456212669179624,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 25.267554464519232,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 23.151473013284814,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 26.581167404799658,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 27.420751117701382,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 27.114050647025415,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 31.24176539751104,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 19.748285728688625,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 24.088996006863912,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 24.51547990153638,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 24.0323059370683,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 21.250307254866,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 23.183710838146236,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 18.86213142314138,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 20.250856057315715,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 19.23029283710497,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 19.75851768836741,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 18.63998660894644,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 17.1021351206111,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 18.603001478957093,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 19.08978795919056,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 10.33953280943706,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 14.814518706427682,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 17.49922237420433,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 13.016793560268635,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 19.702934276180788,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 19.85781986411904,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 10.570478245481619,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 11.115909382675506,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 12.976575164403666,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 14.126771985871844,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 13.663835464450806,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 11.642925365718654,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 18.482500028305395,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 14.53278376398365,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 10.487262644617,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 10.673180078885583,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 11.18593263762315,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 10.869227494495277,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 11.286223183548952,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 9.109625614726399,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 7.477391408880978,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 8.642640263174908,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 8.486793837657885,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 7.843154865402886,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 6.9518339030479455,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 17.29287107366593,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 8.17745416574451,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 6.948844981709945,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 7.172570090455115,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 6.086825865132809,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 6.339586057776598,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 6.337004391429238,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 6.739055391723395,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 4.819600073506849,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 3.393195445779742,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 16.546989625237227,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 7.517870461147038,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 6.140489867749478,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 3.4281365539005684,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 5.405552980438912,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 5.430808059913193,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 4.2049031430174,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 3.338020799758183,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 3.098559705964088,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 8.873599073121154,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 4.494801143527077,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 2.4521393196787096,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 10.250178866826943,
+      "mode": "opt"
+    },
+    {
+      "epoch": 0,
+      "loss": 5.602682056952076,
+      "mae_dma": 1.2879534538385193,
+      "mae_e": 23.85538300019565,
+      "mae_e_per_atom": 1.3588814797830588,
+      "mae_f": 0.4024602611350945,
+      "mae_mu": 0.9418732159754993,
+      "mae_mu_per_atom": 0.0604465860826811,
+      "mae_spread_e_per_atom": 0.5077403602947318,
+      "mae_total_charge": 0.0,
+      "mode": "eval",
+      "offset_e_per_atom": -1.2582196283135152,
+      "q95_dma": 2.0275818665,
+      "q95_e": 47.89302289740734,
+      "q95_f": 1.167774632336225,
+      "q95_mu": 2.7662201814529137,
+      "q95_total_charge": 0.0,
+      "rel_mae_dma": 1511.4048009068683,
+      "rel_mae_f": 61.22747588773403,
+      "rel_mae_mu": 20.279475393730912,
+      "rel_rmse_dma": 1175.42785132619,
+      "rel_rmse_f": 64.0771522523228,
+      "rel_rmse_mu": 24.315562028014423,
+      "rmse_charges": 1.2271435408085503,
+      "rmse_dma": 1.3705193655282621,
+      "rmse_e": 27.505588189612613,
+      "rmse_e_per_atom": 1.4745042149118046,
+      "rmse_f": 0.5839119629519376,
+      "rmse_local_dipoles": 1.415086811872192,
+      "rmse_mu": 1.297437296774517,
+      "rmse_mu_per_atom": 0.08068113723115794,
+      "rmse_spread_e_per_atom": 0.7687951916598306,
+      "rmse_total_charge": 0.0
+    },
+    {
+      "epoch": 0,
+      "loss": 5.602682056952076,
+      "mae_dma": 1.2879534538385193,
+      "mae_e": 23.85538300019565,
+      "mae_e_per_atom": 1.3588814797830588,
+      "mae_f": 0.4024602611350945,
+      "mae_mu": 0.9418732159754993,
+      "mae_mu_per_atom": 0.0604465860826811,
+      "mae_spread_e_per_atom": 0.5077403602947318,
+      "mae_total_charge": 0.0,
+      "mode": "eval",
+      "offset_e_per_atom": -1.2582196283135152,
+      "q95_dma": 2.0275818665,
+      "q95_e": 47.89302289740734,
+      "q95_f": 1.167774632336225,
+      "q95_mu": 2.7662201814529137,
+      "q95_total_charge": 0.0,
+      "rel_mae_dma": 1511.4048009068683,
+      "rel_mae_f": 61.22747588773403,
+      "rel_mae_mu": 20.279475393730912,
+      "rel_rmse_dma": 1175.42785132619,
+      "rel_rmse_f": 64.0771522523228,
+      "rel_rmse_mu": 24.315562028014423,
+      "rmse_charges": 1.2271435408085503,
+      "rmse_dma": 1.3705193655282621,
+      "rmse_e": 27.505588189612613,
+      "rmse_e_per_atom": 1.4745042149118046,
+      "rmse_f": 0.5839119629519376,
+      "rmse_local_dipoles": 1.415086811872192,
+      "rmse_mu": 1.297437296774517,
+      "rmse_mu_per_atom": 0.08068113723115794,
+      "rmse_spread_e_per_atom": 0.7687951916598306,
+      "rmse_total_charge": 0.0
+    },
+    {
+      "epoch": 1,
+      "loss": 15.028854609620849,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 3.4145510828654433,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 9.150934451099529,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 5.199198009524055,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.6786267063163063,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 5.766297141333065,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 6.102757216500698,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 4.1954701092063615,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 3.243504538509769,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.724933624618435,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 5.618515819355208,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 7.848077748994633,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 4.337419245211395,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 5.416500386876993,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 4.3228744449481855,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 3.3461056785093186,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.8325222742315144,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.957158349963756,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 1.9341770311917814,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 5.4009707122964175,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.1802243529280543,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 4.148843821929862,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 3.6822299523090574,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.304038840405585,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 3.1572878823071786,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.358887620947919,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 1.8390343354507837,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.421600222141534,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.493222426440912,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 5.616654642206028,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 3.4088505884621134,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.011563898535808,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.971170680099949,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.397716581718148,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.546268233211335,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 4.653062516558916,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.422301491605945,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 1.4566012799940298,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.087114657194123,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 13.430289706029827,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 3.4422984364984393,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 0.9798248710294312,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.4582463040182403,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 1.779938961057621,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.8683828823454216,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 1.283813462969587,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 1.7774225642816388,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.542640106316063,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 4.914195209460667,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 1.9472942871523322,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 3.0289113447480176,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 1.7112550079623599,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 1.751844620176255,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.0488154319814225,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 1.5547448659301917,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 1.2720190966771328,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 0.960272171087486,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 3.728438706992091,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 1.6344421054345661,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 1.8683442487181794,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 1.0991433548702463,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.0154589082436236,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 1.859478017372485,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 1.69712236761972,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.639629028448956,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.8101988782322027,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 0.9480802401535318,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 1.183699443841383,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 1.6263986844459284,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 4.42907038104553,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 1.6137588243865675,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.2952205109422033,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 1.511690522554377,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 3.4064759314823085,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 4.959000217084968,
+      "mode": "opt"
+    },
+    {
+      "epoch": 1,
+      "loss": 2.169722331995772,
+      "mae_dma": 1.2879534538385193,
+      "mae_e": 5.819908691423725,
+      "mae_e_per_atom": 0.4762116175108933,
+      "mae_f": 0.3043630515532391,
+      "mae_mu": 0.9418732159754993,
+      "mae_mu_per_atom": 0.0604465860826811,
+      "mae_spread_e_per_atom": 0.48346659345102583,
+      "mae_total_charge": 0.0,
+      "mode": "eval",
+      "offset_e_per_atom": 0.030229066417218772,
+      "q95_dma": 2.0275818665,
+      "q95_e": 9.342220620166609,
+      "q95_f": 0.8170006559639513,
+      "q95_mu": 2.7662201814529137,
+      "q95_total_charge": 0.0,
+      "rel_mae_dma": 1511.4048009068683,
+      "rel_mae_f": 46.3036557883605,
+      "rel_mae_mu": 20.279475393730912,
+      "rel_rmse_dma": 1175.42785132619,
+      "rel_rmse_f": 44.4000139402726,
+      "rel_rmse_mu": 24.315562028014423,
+      "rmse_charges": 1.2271435408085503,
+      "rmse_dma": 1.3705193655282621,
+      "rmse_e": 6.666815444206272,
+      "rmse_e_per_atom": 0.7543212376476454,
+      "rmse_f": 0.404601303017772,
+      "rmse_local_dipoles": 1.415086811872192,
+      "rmse_mu": 1.297437296774517,
+      "rmse_mu_per_atom": 0.08068113723115794,
+      "rmse_spread_e_per_atom": 0.753715286504008,
+      "rmse_total_charge": 0.0
+    },
+    {
+      "epoch": 1,
+      "loss": 2.169722331995772,
+      "mae_dma": 1.2879534538385193,
+      "mae_e": 5.819908691423725,
+      "mae_e_per_atom": 0.4762116175108933,
+      "mae_f": 0.3043630515532391,
+      "mae_mu": 0.9418732159754993,
+      "mae_mu_per_atom": 0.0604465860826811,
+      "mae_spread_e_per_atom": 0.48346659345102583,
+      "mae_total_charge": 0.0,
+      "mode": "eval",
+      "offset_e_per_atom": 0.030229066417218772,
+      "q95_dma": 2.0275818665,
+      "q95_e": 9.342220620166609,
+      "q95_f": 0.8170006559639513,
+      "q95_mu": 2.7662201814529137,
+      "q95_total_charge": 0.0,
+      "rel_mae_dma": 1511.4048009068683,
+      "rel_mae_f": 46.3036557883605,
+      "rel_mae_mu": 20.279475393730912,
+      "rel_rmse_dma": 1175.42785132619,
+      "rel_rmse_f": 44.4000139402726,
+      "rel_rmse_mu": 24.315562028014423,
+      "rmse_charges": 1.2271435408085503,
+      "rmse_dma": 1.3705193655282621,
+      "rmse_e": 6.666815444206272,
+      "rmse_e_per_atom": 0.7543212376476454,
+      "rmse_f": 0.404601303017772,
+      "rmse_local_dipoles": 1.415086811872192,
+      "rmse_mu": 1.297437296774517,
+      "rmse_mu_per_atom": 0.08068113723115794,
+      "rmse_spread_e_per_atom": 0.753715286504008,
+      "rmse_total_charge": 0.0
+    }
+  ],
+  "model": {
+    "num_parameters": 10572
+  },
+  "outputs": {
+    "num_checkpoints": 1,
+    "num_models": 1
+  },
+  "runtime": {
+    "loss_line": "WeightedLoss(energy_per_atom_weight=1.0, forces_weight=10.0, dipole_per_atom_weight=1.0, )",
+    "optimizer_log_contains_schedulefree": true,
+    "scheduler_is_noop": true
+  }
+}

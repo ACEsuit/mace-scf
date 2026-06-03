@@ -1,0 +1,6 @@
+name: constant_fermi_baseline
+description: Baseline fixed-point calculator case in constant-Fermi mode.
+
+scf_options:
+  constant_charge: false
+

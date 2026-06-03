@@ -1,0 +1,6 @@
+name: constant_charge_baseline
+description: Baseline fixed-point calculator case in constant-charge mode.
+
+scf_options:
+  constant_charge: true
+

@@ -1,0 +1,7 @@
+name: scf_max_steps
+description: max out the scf steps
+
+scf_options:
+  num_scf_steps: 5
+
+

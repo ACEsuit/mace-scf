@@ -1,0 +1,9 @@
+name: constant_q_clusters
+description: Constant-charge cluster case with pbc FFF.
+
+scf_options:
+  constant_charge: true
+
+inputs:
+  xyz: tests/fixtures/configs/cluster_test_configs.xyz
+  index: ":"

@@ -1,0 +1,12 @@
+name: clusters_force_pbc
+description: Force periodic evaluator on a cluster geometry with pbc FFF.
+
+scf_options:
+  constant_charge: true
+
+inputs:
+  xyz: tests/fixtures/configs/cluster_test_configs.xyz
+  index: ":"
+
+calculator_options:
+  use_pbc_evaluator: true

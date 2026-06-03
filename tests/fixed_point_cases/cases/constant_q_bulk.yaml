@@ -1,0 +1,9 @@
+name: constant_q_bulk
+description: Constant-charge bulk case with pbc TTT.
+
+scf_options:
+  constant_charge: true
+
+inputs:
+  xyz: tests/fixtures/configs/bulk_test_configs.xyz
+  index: ":"

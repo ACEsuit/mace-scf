@@ -1,0 +1,5 @@
+name: scf_tolerance
+description: hit the scf tolerance earlier
+
+scf_options:
+  scf_tolerance: 1.0e-3

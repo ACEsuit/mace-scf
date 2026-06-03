@@ -1,0 +1,17 @@
+name: full_scf_history
+description: Persist the full SCF history in calc.results and in the labelled reference.
+
+calculator_options:
+  save_full_scf_history: true
+
+checks:
+  expected_outputs:
+    - energy
+    - forces
+    - density_coefficients
+    - dipole
+    - fermi_level
+    - electrostatic_energy
+    - electron_energy
+    - num_scf_steps
+    - full_scf_history
