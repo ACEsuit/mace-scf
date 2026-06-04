@@ -95,6 +95,7 @@ def extended_arg_parser() -> argparse.ArgumentParser:
             "slab",
             "molecule_in_box",
             "mixed_periodic",
+            "auto",
         ],
     )
     parser.add_argument(
@@ -130,7 +131,7 @@ def extended_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--field_feature_norms",
         type=str,
-        default="None"
+        default="average"
     )
     parser.add_argument(
         "--fermi_level_offset",
@@ -163,7 +164,7 @@ def extended_arg_parser() -> argparse.ArgumentParser:
         action='store_true'
     )
     parser.add_argument(
-        "--skip-scf-convergence-summary",
+        "--scf-convergence-summary",
         action="store_true",
         default=False,
         help="Skip the post-training fixed-point SCF convergence summary.",
