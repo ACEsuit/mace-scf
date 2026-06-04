@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mace_scf"
+dynamic = ["version"]
+
+[tool.setuptools.dynamic]
+version = {attr = "mace_scf.__version__.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["mace_scf", "mace_scf.*"]

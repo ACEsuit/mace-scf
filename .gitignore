@@ -1,0 +1,33 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+*.egg-info/
+experiments/
+
+# pytest
+.pytest_cache/
+tests/fixtures/models/*.model
+tests/run_train_pipeline/actual/
+
+# mypy
+.mypy_cache/
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+
+*.txt
+slurm*.out
+experiments/
+*.sh
+md_test/
+logs/
+wandb/
+results/
+experiments/
+checkpoints/
