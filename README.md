@@ -3,9 +3,9 @@
 [![Documentation Status](https://readthedocs.org/projects/mace-scf/badge/?version=latest)](https://mace-scf.readthedocs.io/en/latest/?badge=latest)
 
 MACE_SCF extends the MACE machine-learning interatomic potential architecture
-to create charge aware models. The repo provides a sandbox for developing self-consistent MLIPs, as in our preprint on the [design space electrostatic self-consistent MLIPs](https://arxiv.org/abs/2603.14700).
+to create charge aware models. The repo provides a sandbox for developing self-consistent MLIPs, as in our preprint on the [design space of electrostatic self-consistent MLIPs](https://arxiv.org/abs/2603.14700).
 
-Compared with a standard MACE workflow, MACE_SCF introduces several extra
+Compared with a standard MACE workflow, MACE_SCF introduces several new
 concepts that users need to set deliberately: atom-centred multipole density
 coefficients, electrostatic boundary handling, custom training schedules, and
 electrostatics-specific losses. Please read the documentation before trainnig or using any models, since they may not behave at all like local MACE models.
