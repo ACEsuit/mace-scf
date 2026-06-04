@@ -9,9 +9,13 @@ configured SCF step limit is reached.
 
 Its reccomended to read these in order:
 
-- [Model information](model.md)
-- [Using fixed-point SCF models](using.md)
-- [Training](training.md)
-- [Implicit differentiation](implicit_diff.md)
-- [Evaluation](evaluation.md)
-- [ASE calculator](calculator.md)
+```{toctree}
+:maxdepth: 2
+
+model
+using
+training
+implicit_diff
+evaluation
+calculator
+```

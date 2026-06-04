@@ -2,5 +2,9 @@
 
 ## Pages
 
-- [ase calculator for Coulomb Interactions](ase_coulomb_calculator.md)
-- [visualising the electrostatic potential from models](potential_intepolator.md)
+```{toctree}
+:maxdepth: 2
+
+ase_coulomb_calculator
+potential_interpolator
+```

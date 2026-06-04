@@ -6,10 +6,14 @@ the electrostatics once. There is no self-consistent loop at inference time.
 
 ## Pages
 
-- [Model information](model.md)
-- [LocalCharges](nonpolarizable.md)
-- [LocalSplitCharges](local_symmetric_charges.md)
-- [FixedChargeBaselinedMACE](fixed_charge_baseline.md)
-- [Training](training.md)
-- [Evaluation](evaluation.md)
-- [ASE calculator](calculator.md)
+```{toctree}
+:maxdepth: 2
+
+model
+nonpolarizable
+local_symmetric_charges
+fixed_charge_baseline
+training
+evaluation
+calculator
+```

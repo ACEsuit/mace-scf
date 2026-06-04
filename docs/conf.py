@@ -6,6 +6,11 @@ extensions = [
     "myst_parser",
 ]
 
+myst_enable_extensions = [
+    "amsmath",
+    "dollarmath",
+]
+
 source_suffix = {
     ".rst": "restructuredtext",
     ".md": "markdown",
@@ -22,3 +27,7 @@ exclude_patterns = [
 
 html_theme = "sphinx_rtd_theme"
 html_title = "MACE-SCF"
+html_theme_options = {
+    "collapse_navigation": False,
+    "navigation_depth": 4,
+}

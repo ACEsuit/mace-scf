@@ -38,24 +38,14 @@ You can also train various self-consistent MACE models. Currently, one can train
 - Energy Functional SCF models
 - MACE-QEq
 
-## Index
+## Documentation
 
-- [Concepts](concepts/index.md)
-  explains the common ideas used throughout the repo: model families,
-  atomic multipoles, boundary conditions, config files, and losses.
-- [Local-source models](local_sources/index.md)
-  collects local-source model information, training, evaluation, and calculator
-  docs.
-- [Fixed-point SCF models](fixed_point_scf/index.md)
-  collects fixed-point SCF model information, training, evaluation, and
-  calculator docs.
-- [Examples](examples/index.md)
-  links to the current worked examples in `examples/`.
-- [Extras](extras/index.md)
-  describes many useful utilities and added functionality beyond just model fitting and evaluation.
-- [Developer notes](developer/index.md)
-  collects tests, reference outputs, conversion scripts, and implementation
-  notes for contributors.
-- [Reference](reference/index.md)
-  collects data keys, conventions, electrostatics settings, and option
-  reference material.
+```{toctree}
+:maxdepth: 2
+:caption: Contents
+
+concepts/index
+local_sources/index
+fixed_point_scf/index
+extras/index
+```

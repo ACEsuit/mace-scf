@@ -12,6 +12,7 @@ experiments/
 .pytest_cache/
 tests/fixtures/models/*.model
 tests/run_train_pipeline/actual/
+docs/_build/
 
 # mypy
 .mypy_cache/
@@ -22,6 +23,7 @@ tests/run_train_pipeline/actual/
 .vscode/
 
 *.txt
+!docs/requirements.txt
 slurm*.out
 experiments/
 *.sh

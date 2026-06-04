@@ -98,7 +98,7 @@ Hence, to compute the gradient $\partial \mathbf p^\ast / \partial \alpha$, one 
 
 `implicit` mode delegates this implicit-gradient calculation to `torchopt`.
 
-### Constant Total Charge
+## Constant Total Charge
 
 In constant-charge mode, the total charge is fixed and the Fermi level becomes
 an implicit variable. The unknown is the augmented vector
