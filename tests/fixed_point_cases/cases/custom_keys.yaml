@@ -4,3 +4,6 @@ description: Use the non-default multipole and Fermi-level keys present in the f
 keys:
   atomic_multipoles_key: some_multipoles
   fermi_level_key: the_VBM
+
+scf_options:
+  initial_fermi_level: from_data

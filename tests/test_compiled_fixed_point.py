@@ -29,7 +29,7 @@ HAS_TORCH_COMPILER_NAMESPACE = hasattr(torch, "compiler")
 
 
 def _model_path() -> str:
-    return str(reference_model("fixedpoint_l1_stage2"))
+    return str(reference_model("fixedpoint_onebodylinear"))
 
 
 def _input_path() -> str:
@@ -65,9 +65,9 @@ def _build_calculator(
         compensating_jellium=compensating_jellium,
         jellium_slab_bounds=JELLIUM_SLAB_BOUNDS if compensating_jellium else None,
         use_compile=use_compile,
-        atomic_multipoles_key="DMA_coeficients",
-        fermi_level_key="fermi_level",
-        external_field_key="external_field",
+        atomic_multipoles_key="some_multipoles",
+        fermi_level_key="the_VBM",
+        external_field_key="an_applied_field",
         total_charge_key="total_charge",
         scf_options={
             "constant_charge": False,

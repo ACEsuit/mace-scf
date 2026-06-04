@@ -2,7 +2,7 @@ calculator: MACEFixedPointSCF
 usage: single_point
 
 model:
-  name: fixedpoint_l1_stage2
+  name: fixedpoint_onebodylinear
 
 inputs:
   xyz: tests/fixtures/configs/mixed_test_configs.xyz
@@ -15,6 +15,7 @@ keys:
   total_charge_key: total_charge
 
 calculator_options:
+  pbc_handling: mixed_periodic
   use_pbc_evaluator: false
   ignore_nonconverged: false
   save_full_scf_history: false
@@ -24,6 +25,7 @@ calculator_options:
 
 scf_options:
   constant_charge: false
+  initial_fermi_level: zero
   mixing_parameter: 0.2
   num_scf_steps: 100
   scf_tolerance: 1.0e-5

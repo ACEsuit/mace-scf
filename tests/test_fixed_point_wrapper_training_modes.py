@@ -15,7 +15,7 @@ from .paths import reference_config, reference_model, require_file
 from .utils import dataset_from_atoms, split_to_graphs, wrap_loader
 
 
-MODEL_PATH = reference_model("fixedpoint_l1_stage2")
+MODEL_PATH = reference_model("fixedpoint_onebodylinear")
 CONFIGS_PATH = reference_config("mixed_test_configs.xyz")
 DEVICE = os.environ.get("MACE_DEVICE", "cpu")
 INCLUDE_FERMI_LEVEL_OBJECTIVE = os.environ.get("MACE_TEST_FERMI_LEVEL", "1") == "1"
@@ -113,6 +113,8 @@ def _scf_objective_charge_batch_cases():
 def _load_reference_model(device=DEVICE):
     require_file(MODEL_PATH, "Reference fixed-point model")
     model = torch.load(MODEL_PATH, map_location=device).to(device)
+    model.coulomb_energy.set_pbc_handling("mixed_periodic")
+    model.electric_potential_descriptor.set_pbc_handling("mixed_periodic")
     model.return_electrostatic_potentials = INCLUDE_ESP_OBJECTIVE
     return model
 

@@ -95,7 +95,7 @@ def _run_scf_eval(case_name, input_path, pbc_handling, tmp_path, batch_size=1, s
         "--scf_history",
         "none",
     ]
-    if _all_configs_have_info_key(input_path, keys.get("fermi_level_key")):
+    if scf_options.get("initial_fermi_level") == "from_data":
         cmd.extend(["--initial_fermi_level", "from_data"])
     result = subprocess.run(
         cmd,
@@ -109,13 +109,6 @@ def _run_scf_eval(case_name, input_path, pbc_handling, tmp_path, batch_size=1, s
         f"eval_fixed_point.py failed\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
     )
     return read(output_path, index=":")
-
-
-def _all_configs_have_info_key(input_path, key):
-    if key is None:
-        return False
-    atoms_list = read(input_path, index=":")
-    return all(key in atoms.info for atoms in atoms_list)
 
 
 def _legacy_fixed_point_pbc_handling(atoms, case_config):
