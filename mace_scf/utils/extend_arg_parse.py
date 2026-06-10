@@ -227,6 +227,15 @@ def extended_arg_parser() -> argparse.ArgumentParser:
         default=False,
         help="Log scalar parameter and gradient summaries during optimization.",
     )
+    parser.add_argument(
+        "--fixedpoint-initial-charge-head-scale",
+        type=float,
+        default=0.01,
+        help=(
+            "Multiply initial FixedPoint charge-head weights by this factor after "
+            "model construction. Set to 1.0 to disable the rescaling."
+        ),
+    )
 
     remove_options(
         parser,

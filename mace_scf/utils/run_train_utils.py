@@ -23,6 +23,27 @@ def disable_e3nn_codegen():
     set_optimization_defaults(jit_script_fx=init_val)
 
 
+def _rescale_fixedpoint_charge_heads(
+    model: torch.nn.Module,
+    factor: float,
+) -> None:
+    with torch.no_grad():
+        if hasattr(model, "lr_source_maps"):
+            for block in model.lr_source_maps:
+                if hasattr(block, "linear_2"):
+                    for param in block.linear_2.parameters(recurse=False):
+                        param.mul_(factor)
+
+        if hasattr(model, "field_dependent_charges_map") and hasattr(
+            model.field_dependent_charges_map,
+            "element_select_out",
+        ):
+            for param in model.field_dependent_charges_map.element_select_out.parameters(
+                recurse=False
+            ):
+                param.mul_(factor)
+
+
 
 def build_model(
     args,
@@ -160,6 +181,21 @@ def build_model(
                 atom_density_scaling=args.atom_density_scaling,
                 pbc_handling=args.electrostatic_pbc_method,
                 fermi_level_offset=args.fermi_level_offset,
+            )
+        fixedpoint_initial_charge_head_scale = getattr(
+            args,
+            "fixedpoint_initial_charge_head_scale",
+            1.0,
+        )
+        if fixedpoint_initial_charge_head_scale != 1.0:
+            _rescale_fixedpoint_charge_heads(
+                model,
+                factor=fixedpoint_initial_charge_head_scale,
+            )
+            logging.info(
+                "Rescaled initial FixedPoint charge heads by %.3g to keep initial "
+                "charge predictions small",
+                fixedpoint_initial_charge_head_scale,
             )
     elif args.model == "MACEQEq":
         with disable_e3nn_codegen():

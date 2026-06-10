@@ -326,6 +326,7 @@ class FixedPointCore(torch.nn.Module):
             potential_irreps=self.potential_irreps,
             charges_irreps=self.charges_irreps,
             num_elements=num_elements,
+            atom_density_scaling=atom_density_scaling,
             **field_readout_config,
         )
 
