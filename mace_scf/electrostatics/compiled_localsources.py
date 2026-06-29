@@ -238,30 +238,17 @@ class LocalSplitChargesCompiledCore(torch.nn.Module):
         k_vector_batch: torch.Tensor,
         k0_mask: torch.Tensor,
     ) -> torch.Tensor:
-        if self.pbc_handling == "pbc":
-            electro_energy = self.coulomb_energy._forward_pbc(
-                k_vectors=k_vectors,
-                k_norm2=k_norm2,
-                k_vector_batch=k_vector_batch,
-                k0_mask=k0_mask,
-                source_feats=charge_density,
-                node_positions=positions,
-                batch=batch,
-                volume=volume,
-                pbc=pbc.view(-1, 3),
-            )
-        else:
-            electro_energy = self.coulomb_energy._forward_slab(
-                k_vectors=k_vectors,
-                k_norm2=k_norm2,
-                k_vector_batch=k_vector_batch,
-                k0_mask=k0_mask,
-                source_feats=charge_density,
-                node_positions=positions,
-                batch=batch,
-                volume=volume,
-                pbc=pbc.view(-1, 3),
-            )
+        electro_energy = self.coulomb_energy.forward(
+            k_vectors=k_vectors,
+            k_norm2=k_norm2,
+            k_vector_batch=k_vector_batch,
+            k0_mask=k0_mask,
+            source_feats=charge_density,
+            node_positions=positions,
+            batch=batch,
+            volume=volume,
+            pbc=pbc.view(-1, 3),
+        )
         field_energy = torch.sum(total_dipole * external_field, dim=-1)
         return electro_energy + field_energy
 
@@ -535,30 +522,17 @@ class LocalChargesCompiledCore(torch.nn.Module):
         k_vector_batch: torch.Tensor,
         k0_mask: torch.Tensor,
     ) -> torch.Tensor:
-        if self.pbc_handling == "pbc":
-            electro_energy = self.coulomb_energy._forward_pbc(
-                k_vectors=k_vectors,
-                k_norm2=k_norm2,
-                k_vector_batch=k_vector_batch,
-                k0_mask=k0_mask,
-                source_feats=charge_density,
-                node_positions=positions,
-                batch=batch,
-                volume=volume,
-                pbc=pbc.view(-1, 3),
-            )
-        else:
-            electro_energy = self.coulomb_energy._forward_slab(
-                k_vectors=k_vectors,
-                k_norm2=k_norm2,
-                k_vector_batch=k_vector_batch,
-                k0_mask=k0_mask,
-                source_feats=charge_density,
-                node_positions=positions,
-                batch=batch,
-                volume=volume,
-                pbc=pbc.view(-1, 3),
-            )
+        electro_energy = self.coulomb_energy.forward(
+            k_vectors=k_vectors,
+            k_norm2=k_norm2,
+            k_vector_batch=k_vector_batch,
+            k0_mask=k0_mask,
+            source_feats=charge_density,
+            node_positions=positions,
+            batch=batch,
+            volume=volume,
+            pbc=pbc.view(-1, 3),
+        )
         field_energy = torch.sum(total_dipole * external_field, dim=-1)
         return electro_energy + field_energy
 

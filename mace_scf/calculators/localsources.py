@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from typing import Optional
 from ase.calculators.calculator import (
     Calculator,
     PropertyNotImplementedError,
@@ -28,6 +29,47 @@ class _MACELocalSourceCalculator(Calculator):
     uses_formal_charges = False
     includes_polarizability = False
 
+    @staticmethod
+    def _validate_compensating_jellium_options(
+        compensating_jellium: bool,
+        pbc_handling: str,
+        jellium_slab_bounds,
+    ) -> None:
+        if not compensating_jellium:
+            return
+        if pbc_handling != "slab":
+            raise ValueError(
+                "compensating_jellium=True requires pbc_handling='slab'."
+            )
+        if jellium_slab_bounds is None:
+            raise ValueError(
+                "compensating_jellium=True requires "
+                "jellium_slab_bounds=(z_lower, z_upper)."
+            )
+        if len(jellium_slab_bounds) != 2:
+            raise ValueError(
+                "jellium_slab_bounds must be a 2-tuple of (z_lower, z_upper)."
+            )
+
+    @staticmethod
+    def _build_jellium_energy_specs(model, slab_bounds):
+        energy = model.coulomb_energy
+        return {
+            "density_max_l": energy.density_max_l,
+            "density_smearing_width": energy.density_smearing_width,
+            "kspace_cutoff": energy.kspace_cutoff,
+            "slab_bounds": slab_bounds,
+            "include_self_interaction": energy.include_self_interaction,
+        }
+
+    @classmethod
+    def _apply_compensating_jellium(cls, model, slab_bounds, device):
+        from graph_longrange.jellium_energy import JelliumSlabSolvatedEnergy
+
+        model.coulomb_energy = JelliumSlabSolvatedEnergy(
+            **cls._build_jellium_energy_specs(model, slab_bounds)
+        ).to(device)
+
     def __init__(
         self,
         model_path: str,
@@ -45,6 +87,8 @@ class _MACELocalSourceCalculator(Calculator):
         compile_dynamic: bool = False,
         compile_fullgraph: bool = False,
         compile_warmup: bool = True,
+        compensating_jellium: bool = False,
+        jellium_slab_bounds: Optional[tuple[float, float]] = None,
         **kwargs,
     ):
         Calculator.__init__(self, **kwargs)
@@ -54,12 +98,25 @@ class _MACELocalSourceCalculator(Calculator):
         torch_tools.set_default_dtype(default_dtype)
 
         self.model = torch.load(f=model_path, map_location=self.device).to(self.device)
+        self._validate_compensating_jellium_options(
+            compensating_jellium=compensating_jellium,
+            pbc_handling=pbc_handling,
+            jellium_slab_bounds=jellium_slab_bounds,
+        )
+        if compensating_jellium:
+            self._apply_compensating_jellium(
+                self.model,
+                slab_bounds=jellium_slab_bounds,
+                device=self.device,
+            )
         self.model.coulomb_energy.set_pbc_handling(pbc_handling)
         self.r_max = float(self.model.r_max)
         self.energy_units_to_eV = energy_units_to_eV
         self.length_units_to_A = length_units_to_A
         self.use_compile = use_compile
         self.compile_warmup = compile_warmup
+        self.compensating_jellium = compensating_jellium
+        self.jellium_slab_bounds = jellium_slab_bounds
         self.z_table = utils.AtomicNumberTable(
             [int(z) for z in self.model.atomic_numbers]
         )
