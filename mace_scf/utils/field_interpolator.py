@@ -249,7 +249,6 @@ class _BaseInterpolator:
             samples_potential
             + spread_field_z * sample_points[:, 2]
             + external_field[2] * sample_points[:, 2]
-            + fermi_level
         )
 
         samples_density = samples_density.cpu().detach().numpy().reshape(output_shape)
@@ -290,6 +289,12 @@ class PotentialInterpolatorJellium(_BaseInterpolator):
         device='cpu',
         subtract_total_charge=False,
     ):
+        if subtract_total_charge:
+            raise ValueError(
+                "PotentialInterpolatorJellium cannot be used with "
+                "subtract_total_charge=True because the jellium countercharge "
+                "must be built from the full atomic total charge."
+            )
         super().__init__(
             sigma=sigma,
             multipoles_max_l=multipoles_max_l,
@@ -302,8 +307,12 @@ class PotentialInterpolatorJellium(_BaseInterpolator):
         slab_upper = float(slab_bounds[1])
         if slab_upper <= slab_lower:
             raise ValueError("Jellium slab bounds are invalid (upper <= lower).")
-        self.register_buffer("slab_lower", torch.tensor(slab_lower))
-        self.register_buffer("slab_upper", torch.tensor(slab_upper))
+        self.slab_lower = torch.tensor(
+            slab_lower, dtype=self.dtype, device=self.device
+        )
+        self.slab_upper = torch.tensor(
+            slab_upper, dtype=self.dtype, device=self.device
+        )
 
         with use_dtype(self.dtype):
             self.smoothing_basis = GTOBasis(
@@ -376,10 +385,17 @@ class PotentialInterpolatorPostProcessor:
             kspace_cutoff = kwargs.pop('kspace_cutoff')
         else:
             kspace_cutoff = calc.model.coulomb_energy.kspace_cutoff
-        self.base_interpolator = PotentialInterpolator(
+        interpolator_cls = PotentialInterpolator
+        interpolator_kwargs = {}
+        if getattr(calc, "compensating_jellium", False):
+            interpolator_cls = PotentialInterpolatorJellium
+            interpolator_kwargs["slab_bounds"] = calc.jellium_slab_bounds
+
+        self.base_interpolator = interpolator_cls(
             sigma=sigma,
             multipoles_max_l=calc.model.coulomb_energy.density_max_l,
             kspace_cutoff=kspace_cutoff,
+            **interpolator_kwargs,
             **kwargs
         )
 
