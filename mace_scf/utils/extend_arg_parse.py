@@ -167,7 +167,7 @@ def extended_arg_parser() -> argparse.ArgumentParser:
         "--scf-convergence-summary",
         action="store_true",
         default=False,
-        help="Skip the post-training fixed-point SCF convergence summary.",
+        help="perform a post-training fixed-point SCF convergence summary.",
     )
     parser.add_argument(
         "--use_linear_final_readout",

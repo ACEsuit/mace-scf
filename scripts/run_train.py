@@ -531,7 +531,7 @@ def main() -> None:
             torch.save(model, Path(args.model_dir) / (args.name + "_" + stage_name + ".model"))
             stages_with_models.append((train_stage, stage_tag))
 
-    if rank == 0 and not args.scf_convergence_summary:
+    if rank == 0 and args.scf_convergence_summary:
         logging.info("Computing SCF convergence summaries")
         for train_stage, stage_tag in stages_with_models:
             stage_name = train_stage["name"]
