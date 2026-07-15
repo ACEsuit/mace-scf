@@ -30,6 +30,7 @@ def update_keyspec_from_kwargs(keyspec, keydict) -> KeySpecification:
         "fermi_level_key",
         "external_field_key",
         "polarizability_key",
+        "rho_fftn_key",
     ]
     arrays = [
         "forces_key",
@@ -89,6 +90,8 @@ class ExtAtomicData(AtomicData):
         cluster_loss_weight = kwargs.pop("cluster_loss_weight", None)
         enegs = kwargs.pop("enegs", None)
         hardness = kwargs.pop("hardness", None)
+        rho_fftn = kwargs.pop("rho_fftn", None)
+        rho_fftn_shape = kwargs.pop("rho_fftn_shape", None)
         super().__init__(**kwargs)
         assert (
             density_coefficients_weight is None
@@ -128,6 +131,8 @@ class ExtAtomicData(AtomicData):
             "cluster_loss_weight": cluster_loss_weight,
             "enegs": enegs,
             "hardness": hardness,
+            "rho_fftn": rho_fftn,
+            "rho_fftn_shape": rho_fftn_shape,
         }
         for key, value in data.items():
             setattr(self, key, value)
@@ -276,6 +281,30 @@ class ExtAtomicData(AtomicData):
             if config.properties.get("hardness") is not None
             else torch.zeros((num_atoms))
         )
+        # rho_fftn: raw DFT reference charge density fftn. Stored on the config
+        # as a real+imag pair with shape [2, N1, N2, N3]. We fold it into a
+        # complex tensor, remember the grid shape (as a [1, 3] tensor so torch
+        # _geometric stacks it into [n_graphs, 3] under batching), and flatten
+        # the values (concatenated across the batch under the default dim-0
+        # cat). The model forward reads the flat tensor and slices per graph
+        # using rho_fftn_shape.
+        if config.properties.get("rho_fftn") is not None:
+            rho_fftn_np = np.asarray(config.properties.get("rho_fftn"))
+            rho_fftn_complex = torch.as_tensor(
+                rho_fftn_np[0] + 1j * rho_fftn_np[1],
+                dtype=torch.complex64
+                if torch.get_default_dtype() == torch.float32
+                else torch.complex128,
+            )
+            rho_fftn_shape = torch.tensor(
+                [list(rho_fftn_complex.shape)], dtype=torch.long
+            )  # [1, 3]
+            rho_fftn = rho_fftn_complex.flatten()
+        else:
+            rho_fftn = torch.zeros((1,), dtype=torch.complex64
+                if torch.get_default_dtype() == torch.float32
+                else torch.complex128)
+            rho_fftn_shape = torch.tensor([[1, 1, 1]], dtype=torch.long)
         return cls(
             edge_index=atomic_data.edge_index,
             positions=atomic_data.positions,
@@ -315,4 +344,6 @@ class ExtAtomicData(AtomicData):
             cluster_loss_weight=cluster_loss_weight,
             enegs=enegs,
             hardness=hardness,
+            rho_fftn=rho_fftn,
+            rho_fftn_shape=rho_fftn_shape,
         )
