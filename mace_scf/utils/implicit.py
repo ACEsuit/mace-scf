@@ -21,7 +21,7 @@ def make_implicit_scf_module(
     if linear_solve == "inverse":
         ls = torchopt.linear_solve.solve_inv()
     elif linear_solve == "normal_cg":
-        ls = torchopt.linear_solve.solve_normal_cg(maxiter=1000, rtol=1e-8, atol=1e-8)
+        ls = torchopt.linear_solve.solve_normal_cg(maxiter=1000, rtol=1e-15, atol=1e-15)
     else:
         raise ValueError(f"Unknown linear_solve method: {linear_solve}")
 
