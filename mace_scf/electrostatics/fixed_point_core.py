@@ -485,6 +485,7 @@ class FixedPointCore(torch.nn.Module):
             volume=data["volume"],
             pbc=data["pbc"].view(-1, 3),
         )
+        self.electric_potential_descriptor.static_quantities = None
 
         # Precompute external E-field features (no Fermi level)
         efield_potential = torch.zeros(
