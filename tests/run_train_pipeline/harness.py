@@ -27,9 +27,7 @@ INITIAL_MODEL_CASES = (
     "FixedPoint",
     "FixedChargeBaselinedMACE",
 )
-SKIPPED_INITIAL_MODEL_CASES = {
-    "FixedPoint": "FixedPoint run-train regression is disabled during test cleanup.",
-}
+SKIPPED_INITIAL_MODEL_CASES = {}
 IGNORED_SUMMARY_PATHS = ()
 
 
@@ -155,7 +153,9 @@ def model_config_overrides(model: str):
                 "field_feature_widths": "[1.5]",
                 "fermi_level_offset": 0.0,
                 "fixedpoint_update_config": {
-                    "type": "LowMemOneBodyLinearUpdateBiased",
+                    "type": "OneBodyVariableUpdate",
+                    "potential_embedding_cls": "BiasedLinearPotentialEmbedding",
+                    "nonlinearity_cls": "NoNonLinearity",
                 },
                 "train_schedule": {
                     0: {
