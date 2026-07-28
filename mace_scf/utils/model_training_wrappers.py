@@ -527,7 +527,7 @@ class QEqModelWrapper(torch.nn.Module):
         optimizer: torch.optim.Optimizer,
         output_args: Dict[str, bool],
     ):  
-        super().__init__
+        super().__init__()
         self.model = model
         self.optimizer = optimizer
         self.output_args = output_args
