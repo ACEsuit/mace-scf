@@ -89,7 +89,7 @@ def _log_wandb_parameter_histograms(model: torch.nn.Module) -> None:
 
 
 def train(
-    model: torch.nn.Module,
+    model: torch.nn.Module, # TODO: remove?
     model_eval_wrapper,
     loss_fn: torch.nn.Module,
     train_loader: DataLoader,
@@ -140,7 +140,7 @@ def train(
 
         for batch in train_loader:
             _, opt_metrics = take_step(
-                model=model_to_train,
+                model=model_to_train, # TODO: remove?
                 model_eval_wrapper=model_eval_wrapper,
                 loss_fn=loss_fn,
                 batch=batch,
@@ -181,7 +181,7 @@ def train(
             optimizer.eval()
         if epoch % eval_interval == 0:
             valid_loss, eval_metrics = evaluate(
-                model=model,
+                model=model, # TODO: remove?
                 model_eval_wrapper=model_eval_wrapper,
                 loss_fn=loss_fn,
                 ema=ema,
@@ -194,7 +194,7 @@ def train(
             if test_loaders is not None:
                 for name, loader in test_loaders.items():
                     _, test_eval_metrics = evaluate(
-                        model=model,
+                        model=model, # TODO: remove?
                         model_eval_wrapper=model_eval_wrapper,
                         loss_fn=loss_fn,
                         ema=ema,
@@ -303,7 +303,7 @@ def get_attribute(obj, attr_name):
 
 
 def take_step(
-    model: torch.nn.Module,
+    model: torch.nn.Module, # TODO: remove?
     model_eval_wrapper,
     loss_fn: torch.nn.Module,
     batch: torch_geometric.batch.Batch,
@@ -322,7 +322,6 @@ def take_step(
 
     # do not set ema when training
     output = model_eval_wrapper(
-        model,
         batch_dict,
         training=True,
     )
@@ -352,7 +351,6 @@ def take_step(
         the_weight.requires_grad_(True)
 
         output = model_eval_wrapper(
-            model,
             batch_dict,
             training=True,
         )
@@ -382,7 +380,6 @@ def take_step(
         the_weight.requires_grad_(True)
 
         output = model_eval_wrapper(
-            model,
             batch_dict,
             training=True,
         )
@@ -477,7 +474,6 @@ def evaluate(
         batch = batch.to(device)
         batch_dict = batch.to_dict()
         output = model_eval_wrapper(
-            model,
             batch_dict,
             training=False,
             ema=ema,
