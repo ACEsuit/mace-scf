@@ -32,7 +32,7 @@ def make_model_wrapper(
     output_args: Dict[str, bool],
     fixed_point_training_options: FixedPointTrainingOptions = None,
 ):
-    # if distributed: 
+    # TODO: if distributed: 
     #     model_class = model.module.__class__.__name__
     # else:
     model_class = model.__class__.__name__
@@ -61,11 +61,13 @@ def make_model_wrapper(
         "FixedChargeBaselinedMACE",
     ]:
         return LocalSourcesModelWrapper(
+            model=model,
             optimizer=optimizer,
             output_args=output_args,
         )
     elif model_class == "MACEQEq":
         return QEqModelWrapper(
+            model=model,
             optimizer=optimizer,
             output_args=output_args,
         )
