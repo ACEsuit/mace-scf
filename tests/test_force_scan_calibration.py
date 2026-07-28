@@ -69,6 +69,7 @@ def _central_difference_atoms(atoms_obj, delta=1e-4):
 def _build_wrapper(model):
     optimizer = torch.optim.SGD(model.parameters(), lr=0.0)
     return LocalSourcesModelWrapper(
+        model=model,
         optimizer=optimizer,
         output_args=OUTPUT_ARGS,
     )
@@ -82,7 +83,7 @@ def _force_gradient_values(wrapper, model, batch_size, delta=1e-5):
     all_energies = []
 
     for batch_dict in wrap_loader(dataset, batch_size=batch_size, device=DEVICE):
-        output = wrapper(model, batch_dict, training=True)
+        output = wrapper(batch_dict, training=True)
         all_energies += list(output["energy"].detach().cpu().numpy())
         all_forces += split_to_graphs(
             output["forces"].detach().cpu().numpy(),
