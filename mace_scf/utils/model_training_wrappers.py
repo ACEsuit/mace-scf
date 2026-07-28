@@ -534,7 +534,7 @@ class QEqModelWrapper(torch.nn.Module):
         self.optimizer = optimizer
         self.output_args = output_args
 
-    def __call__(
+    def forward(
         self,
         batch_dict: Dict[str, torch.Tensor],
         training: bool = False,
