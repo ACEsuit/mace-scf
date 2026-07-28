@@ -378,7 +378,6 @@ class FixedPointWrapper(torch.nn.Module):
             )
         except Exception as exc:
             return self._linearize_fallback_unroll(
-                self.model,
                 batch_dict,
                 training,
                 (

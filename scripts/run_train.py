@@ -181,7 +181,7 @@ def main() -> None:
         dataset=valid_set,
         batch_size=args.valid_batch_size,
         sampler=valid_sampler,
-        shuffle=False, #(valid_sampler is None),
+        shuffle=(valid_sampler is None),
         drop_last=False,
         pin_memory=args.pin_memory,
         num_workers=args.num_workers,
