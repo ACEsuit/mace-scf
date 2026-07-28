@@ -32,10 +32,15 @@ def make_model_wrapper(
     output_args: Dict[str, bool],
     fixed_point_training_options: FixedPointTrainingOptions = None,
 ):
+    # if distributed: 
+    #     model_class = model.module.__class__.__name__
+    # else:
     model_class = model.__class__.__name__
+
 
     if model_class in ["MACE", "ScaleShiftMACE"]:
         return DefaultModelWrapper(
+            model=model,
             optimizer=optimizer,
             output_args=output_args,
         )
@@ -45,6 +50,7 @@ def make_model_wrapper(
                 "fixed_point_training_options must be provided for FixedPoint models"
             )
         return FixedPointWrapper(
+            model=model,
             optimizer=optimizer,
             output_args=output_args,
             training_options=fixed_point_training_options,
@@ -67,7 +73,24 @@ def make_model_wrapper(
         raise ValueError(f"Model class {model_class} does not have a wrapper class")
 
 
-class FixedPointWrapper:
+# TODO: create this class
+# TODO: Rename ModelWrapper to something like ModelTrainingModule
+# class BaseModelWrapper(torch.nn.Module):
+#     def __init__(
+#         self,
+#         model: torch.nn.Module,
+#         optimizer: torch.optim.Optimizer,
+#         output_args: Dict[str, bool],
+#     ):
+#         super().__init__()
+#         self.model = model
+#         self.optimizer = optimizer
+#         self.output_args = output_args
+#     def forward(self):
+#         raise NotImplementedError("BaseModelWrapper is an abstract class and cannot be used directly.")
+
+
+class FixedPointWrapper(torch.nn.Module):
     """Training wrapper for FixedPointCore models.
 
     Supports fixed-point training modes:
@@ -81,10 +104,12 @@ class FixedPointWrapper:
 
     def __init__(
         self,
+        model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         output_args: Dict[str, bool],
         training_options: FixedPointTrainingOptions,
     ):
+        super().__init__()
         if not isinstance(training_options, FixedPointTrainingOptions):
             raise TypeError(
                 "training_options must be a FixedPointTrainingOptions instance"
@@ -94,6 +119,7 @@ class FixedPointWrapper:
                 f"mode must be one of {self.MODES}, got {training_options.mode}"
             )
 
+        self.model = model
         self.training_options = training_options
         self.mode = training_options.mode
         self.optimizer = optimizer
@@ -113,9 +139,8 @@ class FixedPointWrapper:
         if self.mode in ("implicit", "linearize_solve"):
             self._linear_solve = training_options.linear_solve
 
-    def __call__(
+    def forward(
         self,
-        model: torch.nn.Module,
         batch_dict: Dict[str, torch.Tensor],
         training: bool = False,
         ema: Optional[ExponentialMovingAverage] = None,
@@ -127,29 +152,29 @@ class FixedPointWrapper:
         )
         with param_context:
             if self.mode == "direct":
-                return self._forward_direct(model, batch_dict, training)
+                return self._forward_direct(batch_dict, training)
             elif self.mode == "unroll_scf":
-                return self._forward_unroll_scf(model, batch_dict, training)
+                return self._forward_unroll_scf(batch_dict, training)
             elif self.mode == "implicit":
-                return self._forward_implicit(model, batch_dict, training)
+                return self._forward_implicit(batch_dict, training)
             elif self.mode == "linearize_solve":
-                return self._forward_linearize_solve(model, batch_dict, training)
+                return self._forward_linearize_solve(batch_dict, training)
 
-    def _forward_direct(self, model, batch_dict, training):
+    def _forward_direct(self, batch_dict, training):
         if training:
-            for p in model.parameters():
+            for p in self.model.parameters():
                 p.requires_grad = True
 
-        local_state = model.local_part(
+        local_state = self.model.local_part(
             batch_dict,
             compute_force=self.output_args["forces"],
         )
 
-        fermi_level_features = model.features_from_fermi_level(
+        fermi_level_features = self.model.features_from_fermi_level(
             batch_dict["batch"], local_state.positions, batch_dict["fermi_level"]
         )
 
-        field_dep, field_feats = model.scf_step(
+        field_dep, field_feats = self.model.scf_step(
             batch_dict,
             local_state,
             charge_density_in=batch_dict["density_coefficients"],
@@ -158,7 +183,7 @@ class FixedPointWrapper:
         )
         density = local_state.field_independent_charge_density + field_dep
 
-        output = model.build_observables(
+        output = self.model.build_observables(
             data=batch_dict,
             local_state=local_state,
             density=density,
@@ -173,10 +198,10 @@ class FixedPointWrapper:
         return output
 
     def _forward_unroll_scf(
-        self, model, batch_dict, training, num_scf_steps: Optional[int] = None
+        self, batch_dict, training, num_scf_steps: Optional[int] = None
     ):
         return self._runner.eval(
-            model=model,
+            model=self.model,
             data=batch_dict,
             training=training,
             compute_force=self.output_args["forces"],
@@ -224,27 +249,27 @@ class FixedPointWrapper:
     def _max_final_avg_abs_change(scf_result):
         return torch.max(scf_result.final_avg_abs_change.detach()).item()
 
-    def _linearize_fallback_unroll(self, model, batch_dict, training, reason):
+    def _linearize_fallback_unroll(self, batch_dict, training, reason):
         logging.warning("linearize_solve fallback to unroll_scf: %s", reason)
         return self._forward_unroll_scf(
-            model,
             batch_dict,
             training,
             num_scf_steps=LINEARIZE_FALLBACK_UNROLLED_STEPS,
         )
 
-    def _forward_implicit(self, model, batch_dict, training):
-        for p in model.parameters():
+    def _forward_implicit(self, batch_dict, training):
+        # TODO: make sure checks are added such that torchopt is not used with implicit diff.
+        for p in self.model.parameters():
             p.requires_grad = True
 
-        local_state = model.local_part(
+        local_state = self.model.local_part(
             batch_dict, compute_force=self.output_args["forces"]
         )
 
         initial_density = self._runner.get_initial_density(local_state, batch_dict)
-        initial_fermi = self._runner.get_initial_fermi(model, local_state, batch_dict)
+        initial_fermi = self._runner.get_initial_fermi(self.model, local_state, batch_dict)
         scf_result = self._runner.converge(
-            model, batch_dict, local_state, initial_density, initial_fermi,
+            self.model, batch_dict, local_state, initial_density, initial_fermi,
             compute_force=False,
         )
 
@@ -254,7 +279,6 @@ class FixedPointWrapper:
                 min(SCF_FALLBACK_UNROLLED_STEPS, scf_result.terminated_step + 1),
             )
             return self._forward_unroll_scf(
-                model,
                 batch_dict,
                 training,
                 num_scf_steps=fallback_steps,
@@ -264,7 +288,6 @@ class FixedPointWrapper:
             scf_result.final_avg_abs_change <= SCF_FALLBACK_ABS_CHANGE_THRESHOLD
         ):
             return self._forward_unroll_scf(
-                model,
                 batch_dict,
                 training,
                 num_scf_steps=SCF_FALLBACK_UNROLLED_STEPS,
@@ -272,7 +295,7 @@ class FixedPointWrapper:
 
         num_graphs = batch_dict["ptr"].numel() - 1
         implicit = make_implicit_scf_module(
-            model=model,
+            model=self.model,
             solved_density=scf_result.density,
             solved_fermi_level=scf_result.fermi_level,
             positions=local_state.positions,
@@ -287,16 +310,16 @@ class FixedPointWrapper:
         if fermi is None:
             fermi = batch_dict["fermi_level"]
 
-        fermi_features = model.features_from_fermi_level(
+        fermi_features = self.model.features_from_fermi_level(
             batch_dict["batch"], local_state.positions, fermi
         )
 
-        field_dep, field_feats = model.scf_step(
+        field_dep, field_feats = self.model.scf_step(
             batch_dict, local_state, density, density, fermi_features
         )
         density_out = local_state.field_independent_charge_density + field_dep
 
-        output = model.build_observables(
+        output = self.model.build_observables(
             data=batch_dict,
             local_state=local_state,
             density=density_out,
@@ -310,19 +333,19 @@ class FixedPointWrapper:
         output["charges_history"] = scf_result.charges_history
         return output
 
-    def _forward_linearize_solve(self, model, batch_dict, training):
-        for p in model.parameters():
+    def _forward_linearize_solve(self, batch_dict, training):
+        for p in self.model.parameters():
             p.requires_grad = True
 
-        local_state = model.local_part(
+        local_state = self.model.local_part(
             batch_dict,
             compute_force=self.output_args["forces"],
         )
 
         initial_density = self._runner.get_initial_density(local_state, batch_dict)
-        initial_fermi = self._runner.get_initial_fermi(model, local_state, batch_dict)
+        initial_fermi = self._runner.get_initial_fermi(self.model, local_state, batch_dict)
         scf_result = self._runner.converge(
-            model,
+            self.model,
             batch_dict,
             local_state,
             initial_density,
@@ -336,7 +359,6 @@ class FixedPointWrapper:
                 min(LINEARIZE_FALLBACK_UNROLLED_STEPS, scf_result.terminated_step + 1),
             )
             return self._forward_unroll_scf(
-                model,
                 batch_dict,
                 training,
                 num_scf_steps=fallback_steps,
@@ -344,7 +366,7 @@ class FixedPointWrapper:
 
         try:
             density, fermi_level, field_feats = linearize_and_solve_density(
-                model=model,
+                model=self.model,
                 data=batch_dict,
                 local_state=local_state,
                 solved_density=scf_result.density,
@@ -354,7 +376,7 @@ class FixedPointWrapper:
             )
         except Exception as exc:
             return self._linearize_fallback_unroll(
-                model,
+                self.model,
                 batch_dict,
                 training,
                 (
@@ -367,7 +389,7 @@ class FixedPointWrapper:
             )
 
         density_residual, charge_residual = self._linearize_post_solve_residuals(
-            model, batch_dict, local_state, density, fermi_level
+            self.model, batch_dict, local_state, density, fermi_level
         )
         density_residual_value = density_residual.item()
         charge_residual_value = charge_residual.item()
@@ -382,7 +404,6 @@ class FixedPointWrapper:
             or charge_residual_value > LINEARIZE_POST_SOLVE_CHARGE_FALLBACK_THRESHOLD
         ):
             return self._linearize_fallback_unroll(
-                model,
                 batch_dict,
                 training,
                 (
@@ -412,7 +433,7 @@ class FixedPointWrapper:
                 self._max_final_avg_abs_change(scf_result),
             )
 
-        output = model.build_observables(
+        output = self.model.build_observables(
             data=batch_dict,
             local_state=local_state,
             density=density,
@@ -427,20 +448,22 @@ class FixedPointWrapper:
         return output
 
 
-class DefaultModelWrapper:
+class DefaultModelWrapper(torch.nn.Module):
     """Training wrapper for standard MACE models (no electrostatics)."""
 
     def __init__(
         self,
+        model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         output_args: Dict[str, bool],
     ):
+        super().__init__()
+        self.model = model
         self.optimizer = optimizer
         self.output_args = output_args
 
-    def __call__(
+    def forward(
         self,
-        model: torch.nn.Module,
         batch_dict: Dict[str, torch.Tensor],
         training: bool = False,
         ema: Optional[ExponentialMovingAverage] = None,
@@ -451,7 +474,7 @@ class DefaultModelWrapper:
             else nullcontext()
         )
         with param_context:
-            return model(
+            return self.model(
                 batch_dict,
                 training=training,
                 compute_force=self.output_args["forces"],
@@ -460,20 +483,22 @@ class DefaultModelWrapper:
             )
 
 
-class LocalSourcesModelWrapper:
+class LocalSourcesModelWrapper(torch.nn.Module):
     """Training wrapper for non-polarizable local-sources models."""
 
     def __init__(
         self,
+        model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         output_args: Dict[str, bool],
     ):
+        super().__init__()
+        self.model = model
         self.optimizer = optimizer
         self.output_args = output_args
 
-    def __call__(
+    def forward(
         self,
-        model: torch.nn.Module,
         batch_dict: Dict[str, torch.Tensor],
         training: bool = False,
         ema: Optional[ExponentialMovingAverage] = None,
@@ -484,27 +509,31 @@ class LocalSourcesModelWrapper:
             else nullcontext()
         )
         with param_context:
-            return model(
+            return self.model(
                 batch_dict,
                 training=training,
                 compute_force=self.output_args["forces"],
                 compute_virials=self.output_args["virials"],
                 compute_stress=self.output_args["stress"],
             )
-class QEqModelWrapper:
+
+
+class QEqModelWrapper(torch.nn.Module):
     """Training wrapper for MaceQEq models."""
 
     def __init__(
         self,
+        model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         output_args: Dict[str, bool],
-    ):
+    ):  
+        super().__init__
+        self.model = model
         self.optimizer = optimizer
         self.output_args = output_args
 
     def __call__(
         self,
-        model: torch.nn.Module,
         batch_dict: Dict[str, torch.Tensor],
         training: bool = False,
         ema: Optional[ExponentialMovingAverage] = None,
@@ -515,7 +544,7 @@ class QEqModelWrapper:
             else nullcontext()
         )
         with param_context:
-            return model(
+            return self.model(
                 batch_dict,
                 training=training,
                 compute_force=self.output_args["forces"],
