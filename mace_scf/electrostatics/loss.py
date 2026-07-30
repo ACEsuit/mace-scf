@@ -221,6 +221,56 @@ def final_terms_fixedpoint_scf_stability(
     )
 
 
+class WeightedFourierDensity(torch.nn.Module):
+    """k-weighted MSE loss between predicted and reference rho(k).
+
+    Ported from FourierFitting (mace-tools/macetools/electrostatics/loss.py).
+    Expects the model to publish, in the flat batch layout:
+        pred["rho_fftn"]                [n_graphs, n_kvec, 2]
+        pred["rho_fftn_dft"]            [n_graphs, n_kvec, 2]
+        pred["k_vectors_normed_squared"] [n_graphs, n_kvec]
+        pred["k_vectors_mask"]          [n_graphs, n_kvec] boolean
+    """
+
+    def __init__(self, form: str = "poly", alpha: float = 1.0, k_min: float = 1.0):
+        super().__init__()
+        forms = ["poly", "gaussian", "exponential"]
+        if form not in forms:
+            raise NameError(f"form must be in {forms}")
+        self.form = form
+        self.alpha = alpha
+        self.k_min = k_min
+
+    def __call__(self, ref: Batch, pred: TensorDict) -> torch.Tensor:
+        if self.form == "poly":
+            weight_factor = pred["k_vectors_normed_squared"] ** (0.5 * self.alpha)
+            w_max = self.k_min ** self.alpha
+            # index 0 in the enumerated grid is k=0; clip its weight and cap globally.
+            weight_factor[:, 0, ...] = w_max * 2.0
+            weight_factor = weight_factor.clip(0, w_max)
+        elif self.form == "exponential":
+            weight_factor = torch.exp(- self.alpha * pred["k_vectors_normed_squared"] ** 0.5)
+        elif self.form == "gaussian":
+            # alpha = 2 * (sigma * pi)**2 where sigma is real-space Gaussian sdev
+            weight_factor = torch.exp(- self.alpha * pred["k_vectors_normed_squared"])
+        weight_factor = weight_factor ** 2.0
+
+        mask = pred["k_vectors_mask"]
+        loss = (pred["rho_fftn"][mask] - pred["rho_fftn_dft"][mask]) ** 2
+        loss = loss * weight_factor[mask].unsqueeze(-1)
+        return torch.mean(loss)
+
+
+def weighted_mean_squared_fourier_density(ref: Batch, pred: TensorDict) -> torch.Tensor:
+    """Simpler default: 1/|k| weighting with a cap. Ported from FourierFitting."""
+    weight_factor = 1 / pred["k_vectors_normed_squared"] ** 0.5
+    weight_factor[:, 0, ...] = 10.0
+    weight_factor = weight_factor.clip(0., 10.0)
+    loss = (pred["rho_fftn"] - pred["rho_fftn_dft"]) ** 2
+    loss = loss * weight_factor.unsqueeze(-1)
+    return torch.mean(loss)
+
+
 class FixedPointStability(torch.nn.Module):
     def __init__(self, smooth=True, beta=10.0, offset=1.0):
         super().__init__()
@@ -262,6 +312,8 @@ _LOSS_FUNCTIONS = {
     "fermi_level_gradient": fermi_level_gradient_function,
     "final_terms_fixedpoint_scf_stability": final_terms_fixedpoint_scf_stability,
     "field_features": weighted_mean_squared_error_field_feats,
+    "rho_fftn": weighted_mean_squared_fourier_density,
+    "fourier_density": WeightedFourierDensity,
 }
 
 

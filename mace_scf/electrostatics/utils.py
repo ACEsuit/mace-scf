@@ -14,6 +14,165 @@ from mace.modules.utils import (
 )
 
 
+def resize_fft(F: torch.Tensor, new_shape: Tuple[int, int, int]) -> torch.Tensor:
+    """Resize a 3D FFT array `F` to `new_shape` by zero-padding or truncating
+    each dimension symmetrically around DC. Ported from FourierFitting
+    (mace-tools/macetools/electrostatics/utils.py) for the rho_fftn "direct"
+    reference mode.
+    """
+    old_shape = F.shape
+    F_shifted = torch.fft.fftshift(F)
+    resized = torch.zeros(new_shape, dtype=F.dtype, device=F.device)
+
+    def compute_indices(old_N, new_N):
+        if new_N <= old_N:
+            start_old = old_N // 2 - new_N // 2
+            start_new = 0
+            size = new_N
+        else:
+            start_old = 0
+            start_new = new_N // 2 - old_N // 2
+            size = old_N
+        return start_old, start_new, size
+
+    slices_old = []
+    slices_new = []
+    for i in range(3):
+        start_old, start_new, size = compute_indices(old_shape[i], new_shape[i])
+        slices_old.append(slice(start_old, start_old + size))
+        slices_new.append(slice(start_new, start_new + size))
+
+    resized[slices_new[0], slices_new[1], slices_new[2]] = \
+        F_shifted[slices_old[0], slices_old[1], slices_old[2]]
+
+    scale = (new_shape[0] * new_shape[1] * new_shape[2]) / (
+        old_shape[0] * old_shape[1] * old_shape[2]
+    )
+    return torch.fft.ifftshift(resized) * scale
+
+
+# NOTE: the installed graph_longrange.kspace.compute_k_vectors no longer
+# supports the full_grid=True path (it was dropped when the flat/sparse layout
+# `compute_k_vectors_flat` was introduced). The Fourier-fitting loss needs the
+# dense, per-graph, full-FFT-grid layout so that a DFT reference `rho_fftn`
+# loaded from data can be zero-padded / truncated onto the model's k-grid via
+# `resize_fft`. Re-implemented locally here to keep the port contained to
+# mace-scf. Mirror of BAK_repo/FourierFitting/graph_longrange/kspace.py
+# (full_grid=True branch).
+def compute_k_vectors_dense_full_grid(
+    cutoff: torch.Tensor,
+    cell_vectors: torch.Tensor,     # [n_graphs, 3, 3]
+    r_cell_vectors: torch.Tensor,   # [n_graphs, 3, 3]
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, List[int]]:
+    """Dense full-grid k-vectors for Fourier fitting.
+
+    Returns
+    -------
+    k_vectors : [n_graphs, n_kvec, 3]
+    k_vectors_normed_squared : [n_graphs, n_kvec]
+    mask : [n_graphs, n_kvec]           True where the k-vector is inside the cutoff sphere
+    grid_shape : [2*n1max, 2*n2max, 2*n3max]  the FFT grid shape used to enumerate k-vectors
+    """
+    device = cell_vectors.device
+    dtype = r_cell_vectors.dtype
+
+    # Determine per-axis max integer index from cutoff.
+    norms = torch.norm(cell_vectors, dim=-1)                          # [n_graphs, 3]
+    normed_lattice_vectors = cell_vectors / norms.unsqueeze(-1)
+    dot_products = torch.einsum(
+        "bij,bij->bi", r_cell_vectors, normed_lattice_vectors
+    )                                                                 # [n_graphs, 3]
+    max_ns = torch.ceil(cutoff * torch.pow(dot_products, -1)).to(torch.int64)
+    max_max_ns = torch.max(max_ns, dim=0).values                      # [3]
+    n1max = int(max_max_ns[0].item())
+    n2max = int(max_max_ns[1].item())
+    n3max = int(max_max_ns[2].item())
+
+    grid_shape = [2 * n1max, 2 * n2max, 2 * n3max]
+
+    # Enumerate all k-vectors on the fftfreq grid (with factors of 2 to match
+    # the half-sphere convention used by the old full_grid=False path).
+    int_kvecs = torch.cartesian_prod(
+        torch.fft.fftfreq(2 * n1max, device=device) * 2 * n1max,
+        torch.fft.fftfreq(2 * n2max, device=device) * 2 * n2max,
+        torch.fft.fftfreq(2 * n3max, device=device) * 2 * n3max,
+    ).to(dtype)
+
+    k_vectors = torch.einsum("ni,bij->bnj", int_kvecs, r_cell_vectors)
+    k_vectors_normed_squared = torch.einsum("bni,bni->bn", k_vectors, k_vectors)
+    mask = k_vectors_normed_squared.le(cutoff * cutoff)
+    return k_vectors, k_vectors_normed_squared, mask, grid_shape
+
+
+def assemble_rho_fftn_dense_grid(
+    source_feats: torch.Tensor,     # [n_nodes, m_dim]  (single sigma; matches charges_irreps)
+    node_positions: torch.Tensor,   # [n_nodes, 3]
+    k_vectors: torch.Tensor,        # [n_graph, max_k, 3]
+    basis_fs: torch.Tensor,         # [n_graph, max_k, n_sigma(=1), m_dim, 2]  from GTOBasis
+    volume: torch.Tensor,           # [n_graph]
+    batch: torch.Tensor,            # [n_nodes]
+) -> torch.Tensor:
+    """Assemble rho(k) on the dense per-graph k-grid used by the Fourier
+    fitting loss. Mirror of graph_longrange.features.assemble_fourier_series_batch
+    but for the dense [n_graph, max_k, ...] layout instead of the flat
+    [n_k_total, ...] layout, so it lines up with resize_fft output.
+
+    Returns rho(k) with shape [n_graph, max_k, 2] (real, imag stacked).
+    """
+    import math
+    n_graph = k_vectors.size(0)
+    max_k = k_vectors.size(1)
+
+    # Per-node k-vectors and basis (broadcast from graph → node)
+    kv_per_node = torch.index_select(k_vectors, 0, batch)   # [n_nodes, max_k, 3]
+    inner = (kv_per_node * node_positions.unsqueeze(1)).sum(-1)  # [n_nodes, max_k]
+    cos_i = torch.cos(inner)
+    sin_i = torch.sin(inner)
+
+    basis_per_node = torch.index_select(basis_fs.squeeze(-3), 0, batch)  # [n_nodes, max_k, m_dim, 2]
+    br = basis_per_node[..., 0]     # [n_nodes, max_k, m_dim]
+    bi = basis_per_node[..., 1]
+
+    coef = source_feats                                     # [n_nodes, m_dim]
+    contrib_r = (coef.unsqueeze(1) * (br * cos_i.unsqueeze(-1) + bi * sin_i.unsqueeze(-1))).sum(-1)
+    contrib_i = (coef.unsqueeze(1) * (bi * cos_i.unsqueeze(-1) - br * sin_i.unsqueeze(-1))).sum(-1)
+
+    rho_r = scatter_sum(contrib_r, batch, dim=0, dim_size=n_graph)  # [n_graph, max_k]
+    rho_i = scatter_sum(contrib_i, batch, dim=0, dim_size=n_graph)
+
+    rho = torch.stack([rho_r, rho_i], dim=-1)
+    scale = (2 * math.pi) ** 3
+    return rho * scale / volume.view(-1, 1, 1)
+
+
+def build_rho_fftn_dft_from_data(
+    data_rho_fftn: torch.Tensor,        # [sum_i N_i]  flat complex, concatenated over batch
+    data_rho_fftn_shape: torch.Tensor,  # [n_graph, 3] long
+    grid_shape: List[int],              # target FFT grid shape used by the model's dense k-grid
+) -> torch.Tensor:
+    """Resize each per-graph raw DFT rho_fftn onto the model's k-grid and
+    stack into [n_graph, prod(grid_shape), 2] real+imag flat layout. Used by
+    the "direct" reference mode.
+    """
+    n_graph = int(data_rho_fftn_shape.size(0))
+    total = grid_shape[0] * grid_shape[1] * grid_shape[2]
+    out = torch.zeros(
+        (n_graph, total, 2),
+        dtype=data_rho_fftn.real.dtype if data_rho_fftn.is_complex() else data_rho_fftn.dtype,
+        device=data_rho_fftn.device,
+    )
+    offset = 0
+    for i in range(n_graph):
+        shape = tuple(int(s) for s in data_rho_fftn_shape[i].tolist())
+        n_i = shape[0] * shape[1] * shape[2]
+        cs = data_rho_fftn[offset:offset + n_i].reshape(shape)
+        offset += n_i
+        resized = resize_fft(cs, (grid_shape[0], grid_shape[1], grid_shape[2]))
+        out[i, :, 0] = resized.real.flatten()
+        out[i, :, 1] = resized.imag.flatten()
+    return out
+
+
 def get_change_of_basis() -> torch.Tensor:
     return CartesianTensor("ij=ji").reduced_tensor_products().change_of_basis
 

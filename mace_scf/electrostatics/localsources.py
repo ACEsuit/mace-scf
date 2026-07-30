@@ -38,7 +38,12 @@ from .field_blocks import (
     LinearPolarizabilityReadoutBlock
 )
 
-from .utils import compute_total_charge_dipole, compute_polarization, get_outputs
+from .fourier_density import FourierDensityFittingBlock
+from .utils import (
+    compute_total_charge_dipole,
+    compute_polarization,
+    get_outputs,
+)
 
 
 class _LocalSourceModelBase(torch.nn.Module):
@@ -274,6 +279,7 @@ class LocalSplitCharges(_LocalSourceModelBase):
         heads: Optional[List[str]] = None,
         compute_polarizability: bool = False,
         use_linear_final_readout: bool = False,
+        rho_fftn_mode: Optional[str] = None,
     ):
         super().__init__()
         self._init_local_model(
@@ -348,6 +354,19 @@ class LocalSplitCharges(_LocalSourceModelBase):
             include_electrostatic_self_interaction=include_electrostatic_self_interaction,
             pbc_handling=pbc_handling,
         )
+
+        # Fourier density fitting: shared block, see fourier_density.py.
+        if rho_fftn_mode is not None:
+            self.fourier_density_block: Optional[FourierDensityFittingBlock] = (
+                FourierDensityFittingBlock(
+                    mode=rho_fftn_mode,
+                    atomic_multipoles_max_l=atomic_multipoles_max_l,
+                    atomic_multipoles_smearing_width=atomic_multipoles_smearing_width,
+                    kspace_cutoff=float(self.kspace_cutoff.item()),
+                )
+            )
+        else:
+            self.fourier_density_block = None
 
     def forward(
         self,
@@ -548,6 +567,32 @@ class LocalSplitCharges(_LocalSourceModelBase):
             compute_stress=compute_stress,
         )
 
+        # Fourier density observables (optional). Delegated to the shared
+        # block; see fourier_density.py.
+        rho_fftn_out = None
+        rho_fftn_dft_out = None
+        rho_fftn_k2_out = None
+        rho_fftn_mask_out = None
+        rho_fftn_grid_shape_out = None
+        if self.fourier_density_block is not None:
+            fd = self.fourier_density_block(
+                kspace_cutoff=self.kspace_cutoff,
+                cell=cell,
+                rcell=rcell,
+                volume=volume,
+                positions=data["positions"],
+                batch=data["batch"],
+                density_pred=charge_density,
+                density_ref=data["density_coefficients"],
+                data_rho_fftn=data.get("rho_fftn"),
+                data_rho_fftn_shape=data.get("rho_fftn_shape"),
+            )
+            rho_fftn_out = fd["rho_fftn"]
+            rho_fftn_dft_out = fd["rho_fftn_dft"]
+            rho_fftn_k2_out = fd["k_vectors_normed_squared"]
+            rho_fftn_mask_out = fd["k_vectors_mask"]
+            rho_fftn_grid_shape_out = fd["k_vectors_grid_shape"]
+
         return {
             "energy": total_energy,
             "node_energy": node_energy,
@@ -561,6 +606,11 @@ class LocalSplitCharges(_LocalSourceModelBase):
             "fermi_level": None,
             "dipole" : total_dipole,
             "polarizability": cart_polarizability,
+            "rho_fftn": rho_fftn_out,
+            "rho_fftn_dft": rho_fftn_dft_out,
+            "k_vectors_normed_squared": rho_fftn_k2_out,
+            "k_vectors_mask": rho_fftn_mask_out,
+            "k_vectors_grid_shape": rho_fftn_grid_shape_out,
         }
 
 

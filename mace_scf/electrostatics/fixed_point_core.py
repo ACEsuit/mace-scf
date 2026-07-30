@@ -35,6 +35,7 @@ from .field_blocks import (
     MultiLayerFeatureMixer,
     GeneralNonLinearBiasReadoutBlock,
 )
+from .fourier_density import FourierDensityFittingBlock
 from .utils import compute_total_charge_dipole
 from .fixed_point_state import LocalState
 
@@ -75,6 +76,7 @@ class FixedPointCore(torch.nn.Module):
         field_norm_factor: Optional[float] = 1.0,
         pbc_handling: str = "mixed_periodic",
         fermi_level_offset: float = 0.0,
+        rho_fftn_mode: Optional[str] = None,
         *,
         fixedpoint_update_config: Dict[str, Any],
         field_readout_config: Dict[str, Any],
@@ -353,6 +355,20 @@ class FixedPointCore(torch.nn.Module):
             node_feats_irreps=hidden_irreps,
             num_interactions=num_interactions,
         )
+
+        # Fourier density fitting: optional, shared with LocalSplitCharges via
+        # FourierDensityFittingBlock. See fourier_density.py for details.
+        if rho_fftn_mode is not None:
+            self.fourier_density_block: Optional[FourierDensityFittingBlock] = (
+                FourierDensityFittingBlock(
+                    mode=rho_fftn_mode,
+                    atomic_multipoles_max_l=atomic_multipoles_max_l,
+                    atomic_multipoles_smearing_width=atomic_multipoles_smearing_width,
+                    kspace_cutoff=float(kspace_cutoff),
+                )
+            )
+        else:
+            self.fourier_density_block = None
 
     # ------------------------------------------------------------------ #
     #  Core decomposed methods                                            #
@@ -655,6 +671,32 @@ class FixedPointCore(torch.nn.Module):
             compute_stress=compute_stress,
         )
 
+        # Fourier density observables (optional). Delegated to a shared
+        # block; see fourier_density.py.
+        rho_fftn_out: Optional[torch.Tensor] = None
+        rho_fftn_dft_out: Optional[torch.Tensor] = None
+        rho_fftn_k2_out: Optional[torch.Tensor] = None
+        rho_fftn_mask_out: Optional[torch.Tensor] = None
+        rho_fftn_grid_shape_out: Optional[torch.Tensor] = None
+        if self.fourier_density_block is not None:
+            fd = self.fourier_density_block(
+                kspace_cutoff=self.kspace_cutoff,
+                cell=data["cell"],
+                rcell=data["rcell"],
+                volume=data["volume"],
+                positions=positions,
+                batch=data["batch"],
+                density_pred=density,
+                density_ref=data["density_coefficients"],
+                data_rho_fftn=data.get("rho_fftn"),
+                data_rho_fftn_shape=data.get("rho_fftn_shape"),
+            )
+            rho_fftn_out = fd["rho_fftn"]
+            rho_fftn_dft_out = fd["rho_fftn_dft"]
+            rho_fftn_k2_out = fd["k_vectors_normed_squared"]
+            rho_fftn_mask_out = fd["k_vectors_mask"]
+            rho_fftn_grid_shape_out = fd["k_vectors_grid_shape"]
+
         return {
             "energy": total_energy,
             "forces": forces,
@@ -670,4 +712,9 @@ class FixedPointCore(torch.nn.Module):
             "field_independent_charge_density": local_state.field_independent_charge_density,
             "esps": esps,
             "esps_dft": esps_dft,
+            "rho_fftn": rho_fftn_out,
+            "rho_fftn_dft": rho_fftn_dft_out,
+            "k_vectors_normed_squared": rho_fftn_k2_out,
+            "k_vectors_mask": rho_fftn_mask_out,
+            "k_vectors_grid_shape": rho_fftn_grid_shape_out,
         }
