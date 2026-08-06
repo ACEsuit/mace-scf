@@ -490,12 +490,14 @@ def evaluate(
             if isinstance(output[key], torch.Tensor):
                 output[key] = output[key].detach()
         
-        batch = batch.cpu()
-        output = tensor_dict_to_device(output, device=torch.device("cpu"))
 
+        # DDP requires that loss is calculated on GPU (nccl has no CPU backend)
         loss = loss_fn(pred=output, ref=batch)
         total_loss += to_numpy(loss).item()
         num_configs += batch.num_graphs
+
+        batch = batch.cpu()
+        output = tensor_dict_to_device(output, device=torch.device("cpu"))
 
         if output.get("energy") is not None and batch.energy is not None:
             E_computed = True
