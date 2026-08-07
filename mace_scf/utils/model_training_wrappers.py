@@ -32,9 +32,6 @@ def make_model_wrapper(
     output_args: Dict[str, bool],
     fixed_point_training_options: FixedPointTrainingOptions = None,
 ):
-    # TODO: if distributed: 
-    #     model_class = model.module.__class__.__name__
-    # else:
     model_class = model.__class__.__name__
 
 
@@ -165,6 +162,7 @@ class FixedPointWrapper(torch.nn.Module):
     def _forward_direct(self, batch_dict, training):
         if training:
             for p in self.model.parameters():
+                # if type(self) == DDP: assert p.requires_grad, "Whether a parameter requires grad cannot be changed after DDP initialization."
                 p.requires_grad = True
 
         local_state = self.model.local_part(
@@ -260,7 +258,6 @@ class FixedPointWrapper(torch.nn.Module):
         )
 
     def _forward_implicit(self, batch_dict, training):
-        # TODO: make sure checks are added such that torchopt is not used with implicit diff.
         for p in self.model.parameters():
             p.requires_grad = True
 
@@ -337,6 +334,7 @@ class FixedPointWrapper(torch.nn.Module):
 
     def _forward_linearize_solve(self, batch_dict, training):
         for p in self.model.parameters():
+            # if type(self) == DDP: assert p.requires_grad, "Whether a parameter requires grad cannot be changed after DDP initialization."
             p.requires_grad = True
 
         local_state = self.model.local_part(
