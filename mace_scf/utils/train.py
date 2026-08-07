@@ -13,17 +13,11 @@ from torch.utils.data.distributed import DistributedSampler
 
 from mace.tools import torch_geometric
 from mace.tools.checkpoint import CheckpointHandler, CheckpointState
-from mace.tools.torch_tools import tensor_dict_to_device, to_numpy
-from mace.tools.utils import (
-    MetricsLogger,
-    compute_mae,
-    compute_q95,
-    compute_rel_mae,
-    compute_rel_rmse,
-    compute_rmse,
-)
+from mace.tools.torch_tools import to_numpy
+from mace.tools.utils import MetricsLogger
 import os
-from mace.tools.scatter import scatter_sum
+
+from mace_scf.utils.eval_metrics import MaceSCFLoss
 
 
 def _should_log_grad_summary(opt_step: int, frequency: Optional[int]) -> bool:
@@ -119,6 +113,11 @@ def train(
     valid_loss = np.inf
     patience_counter = 0
     keep_last = False
+    should_stop = False
+
+    # rank 0 alone decides whether to stop (see below); every other rank
+    # just waits for this broadcast flag, mirroring mace.tools.train.train.
+    exit_now = torch.zeros(1, device=device) if train_sampler is not None else None
 
     if max_grad_norm is not None:
         logging.info(f"Using gradient clipping with tolerance={max_grad_norm:.3f}")
@@ -235,8 +234,9 @@ def train(
                     if "mae_fermi_level" in eval_metrics:
                         wandb_log_dict["valid_mae_fermi_level"] = eval_metrics["mae_fermi_level"]
                         wandb_log_dict["valid_rmse_fermi_level"] = eval_metrics["rmse_fermi_level"]
-                    
+
                     wandb.log(wandb_log_dict)
+
                 if valid_loss >= lowest_loss:
                     if save_all_checkpoints:
                         if ema is not None:
@@ -257,7 +257,9 @@ def train(
                         logging.info(
                             f"Stopping optimization after {patience_counter} epochs without improvement"
                         )
-                        break
+                        should_stop = True
+                        if exit_now is not None:
+                            exit_now.fill_(1)
                 else:
                     lowest_loss = valid_loss
                     patience_counter = 0
@@ -278,6 +280,11 @@ def train(
                         keep_last = False or save_all_checkpoints
         if train_sampler is not None:
             torch.distributed.barrier()
+        if exit_now is not None:
+            torch.distributed.broadcast(exit_now, src=0)
+            should_stop = exit_now.item() == 1
+        if should_stop:
+            break
         epoch += 1
 
     logging.info("Training complete")
@@ -430,43 +437,13 @@ def evaluate(
     data_loader: DataLoader,
     device: torch.device,
 ) -> Tuple[float, Dict[str, Any]]:
-    num_configs = 0
-    total_loss = 0.0
-    E_computed = False
-    delta_es_list = []
-    delta_es_per_atom_list = []
-    delta_fs_list = []
-    Fs_computed = False
-    fs_list = []
-    stress_computed = False
-    delta_stress_list = []
-    delta_stress_per_atom_list = []
-    virials_computed = False
-    delta_virials_list = []
-    delta_virials_per_atom_list = []
-    Mus_computed = False
-    delta_mus_list = []
-    delta_mus_per_atom_list = []
-    mus_list = []
-    dmas_computed = False
-    delta_dmas_list = []
-    dmas_list = []
-    delta_esps_list = []
-    esps_list = []
-    polarizability_computed = False
-    delta_polarizability_list = []
-    delta_polarizability_per_atom_list = []
-    total_charge_computed = False
-    delta_total_charge_list = []
-    fermi_level_computed = False
-    delta_fermi_level_list = []
-    batch = None  # for pylint
-
     for name, param in model.named_parameters():
         if name == 'batch_positions':
             continue
         param.requires_grad_(False)
         param.grad = None
+
+    metrics = MaceSCFLoss(loss_fn=loss_fn).to(device)
 
     start_time = time.time()
     for batch in data_loader:
@@ -484,190 +461,14 @@ def evaluate(
             param.requires_grad_(False)
             param.grad = None
 
-        # avoid memory leaks
-        for key in output:
-            if isinstance(output[key], torch.Tensor):
-                output[key] = output[key].detach()
-        
+        # DDP (and MaceSCFLoss's cross-rank all_reduce/all_gather) requires
+        # that the loss and per-sample tensors stay on GPU (nccl has no CPU
+        # backend).
+        metrics.update(batch, output)
 
-        # DDP requires that loss is calculated on GPU (nccl has no CPU backend)
-        loss = loss_fn(pred=output, ref=batch)
-        total_loss += to_numpy(loss).item()
-        num_configs += batch.num_graphs
-
-        batch = batch.cpu()
-        output = tensor_dict_to_device(output, device=torch.device("cpu"))
-
-        if output.get("energy") is not None and batch.energy is not None:
-            E_computed = True
-            delta_es_list.append(batch.energy - output["energy"])
-            delta_es_per_atom_list.append(
-                (batch.energy - output["energy"]) / (batch.ptr[1:] - batch.ptr[:-1])
-            )
-        if output.get("forces") is not None and batch.forces is not None:
-            Fs_computed = True
-            delta_fs_list.append(batch.forces - output["forces"])
-            fs_list.append(batch.forces)
-        if output.get("stress") is not None and batch.stress is not None:
-            stress_computed = True
-            delta_stress_list.append(batch.stress - output["stress"])
-            delta_stress_per_atom_list.append(
-                (batch.stress - output["stress"])
-                / (batch.ptr[1:] - batch.ptr[:-1]).view(-1, 1, 1)
-            )
-        if output.get("virials") is not None and batch.virials is not None:
-            virials_computed = True
-            delta_virials_list.append(batch.virials - output["virials"])
-            delta_virials_per_atom_list.append(
-                (batch.virials - output["virials"])
-                / (batch.ptr[1:] - batch.ptr[:-1]).view(-1, 1, 1)
-            )
-        if output.get("density_coefficients") is not None and batch.total_charge is not None:
-            total_charge_computed = True
-            total_charge = scatter_sum(
-                src=output["density_coefficients"][:,0], index=batch.batch, dim=-1
-            )
-            delta_total_charge_list.append(batch.total_charge - total_charge)
-        if output.get("fermi_level") is not None and batch.fermi_level is not None:
-            fermi_level_computed = True
-            delta_fermi_level_list.append(batch.fermi_level - output["fermi_level"])
-        if output.get("dipole") is not None and batch.dipole is not None:
-            dipole_components_to_include = batch.dipole_weight.view(-1, 3) > 0.0
-            if torch.any(dipole_components_to_include):
-                dipole_differences = (batch.dipole - output["dipole"])
-                num_atoms = (batch.ptr[1:] - batch.ptr[:-1]).view(-1, 1)
-                num_atoms = num_atoms.repeat(1, 3)
-
-                delta_mus_list.append(dipole_differences[dipole_components_to_include])
-                delta_mus_per_atom_list.append(
-                    dipole_differences[dipole_components_to_include] / num_atoms[dipole_components_to_include]
-                )
-                mus_list.append(batch.dipole[dipole_components_to_include]) # mus list is len(observations) not len(structures)
-        if (
-            output.get("density_coefficients") is not None
-            and batch.density_coefficients is not None
-        ):
-            dmas_computed = True
-            delta_dmas_list.append(
-                batch.density_coefficients - output["density_coefficients"]
-            )
-            dmas_list.append(batch.density_coefficients)
-
-        if (
-            output.get("electrostatic_potentials") is not None
-            and batch.electrostatic_potentials is not None
-        ):
-            esps_computed = True
-            delta_esps_list.append(
-                batch.electrostatic_potentials - output["electrostatic_potentials"]
-            )
-            esps_list.append(batch.electrostatic_potentials)
-        else:
-            esps_computed= False
-        if output.get("polarizability") is not None and batch.polarizability is not None:
-            polars_to_include = batch.polarizability_weight > 0.0
-            if torch.any(polars_to_include):
-                polarizability_computed = True
-                delta_polarizability_list.append(batch.polarizability[polars_to_include] - output["polarizability"][polars_to_include])
-                delta_polarizability_per_atom_list.append(
-                    (batch.polarizability - output["polarizability"])[polars_to_include]
-                    / (batch.ptr[1:] - batch.ptr[:-1]).view(-1, 1, 1)[polars_to_include]
-                )
-
-    Mus_computed = len(delta_mus_list) > 0
-    polars_computed = len(delta_polarizability_list) > 0
-
-    avg_loss = total_loss / len(data_loader)
-
-    aux = {
-        "loss": avg_loss,
-    }
-
-    if E_computed:
-        delta_es = to_numpy(torch.cat(delta_es_list, dim=0))
-        delta_es_per_atom = to_numpy(torch.cat(delta_es_per_atom_list, dim=0))
-        aux["mae_e"] = compute_mae(delta_es)
-        aux["mae_e_per_atom"] = compute_mae(delta_es_per_atom)
-        aux["rmse_e"] = compute_rmse(delta_es)
-        aux["rmse_e_per_atom"] = compute_rmse(delta_es_per_atom)
-        aux["q95_e"] = compute_q95(delta_es)
-        offset = np.mean(delta_es_per_atom)
-        reduced = delta_es_per_atom - offset
-        aux["offset_e_per_atom"] = offset
-        aux["rmse_spread_e_per_atom"] = compute_rmse(reduced)
-        aux["mae_spread_e_per_atom"] = compute_mae(reduced)
-    if Fs_computed:
-        delta_fs = to_numpy(torch.cat(delta_fs_list, dim=0))
-        fs = to_numpy(torch.cat(fs_list, dim=0))
-        aux["mae_f"] = compute_mae(delta_fs)
-        aux["rel_mae_f"] = compute_rel_mae(delta_fs, fs)
-        aux["rmse_f"] = compute_rmse(delta_fs)
-        aux["rel_rmse_f"] = compute_rel_rmse(delta_fs, fs)
-        aux["q95_f"] = compute_q95(delta_fs)
-    if stress_computed:
-        delta_stress = to_numpy(torch.cat(delta_stress_list, dim=0))
-        delta_stress_per_atom = to_numpy(torch.cat(delta_stress_per_atom_list, dim=0))
-        aux["mae_stress"] = compute_mae(delta_stress)
-        aux["rmse_stress"] = compute_rmse(delta_stress)
-        aux["rmse_stress_per_atom"] = compute_rmse(delta_stress_per_atom)
-        aux["q95_stress"] = compute_q95(delta_stress)
-    if virials_computed:
-        delta_virials = to_numpy(torch.cat(delta_virials_list, dim=0))
-        delta_virials_per_atom = to_numpy(torch.cat(delta_virials_per_atom_list, dim=0))
-        aux["mae_virials"] = compute_mae(delta_virials)
-        aux["rmse_virials"] = compute_rmse(delta_virials)
-        aux["rmse_virials_per_atom"] = compute_rmse(delta_virials_per_atom)
-        aux["q95_virials"] = compute_q95(delta_virials)
-    if Mus_computed:
-        delta_mus = to_numpy(torch.cat(delta_mus_list, dim=0))
-        delta_mus_per_atom = to_numpy(torch.cat(delta_mus_per_atom_list, dim=0))
-        mus = to_numpy(torch.cat(mus_list, dim=0))
-        aux["mae_mu"] = compute_mae(delta_mus)
-        aux["mae_mu_per_atom"] = compute_mae(delta_mus_per_atom)
-        aux["rel_mae_mu"] = compute_rel_mae(delta_mus, mus)
-        aux["rmse_mu"] = compute_rmse(delta_mus)
-        aux["rmse_mu_per_atom"] = compute_rmse(delta_mus_per_atom)
-        aux["rel_rmse_mu"] = compute_rel_rmse(delta_mus, mus)
-        aux["q95_mu"] = compute_q95(delta_mus)
-    if dmas_computed:
-        delta_dmas = to_numpy(torch.cat(delta_dmas_list, dim=0))
-        dmas = to_numpy(torch.cat(dmas_list, dim=0))
-        aux["mae_dma"] = compute_mae(delta_dmas)
-        aux["rel_mae_dma"] = compute_rel_mae(delta_dmas, dmas)
-        aux["rmse_dma"] = compute_rmse(delta_dmas)
-        aux["rel_rmse_dma"] = compute_rel_rmse(delta_dmas, dmas)
-        aux["q95_dma"] = compute_q95(delta_dmas)
-        if delta_dmas.shape[0] > 0:
-            aux['rmse_charges'] = compute_rmse(delta_dmas[:,0:1])
-        if delta_dmas.shape[1] > 1:
-            aux['rmse_local_dipoles'] = compute_rmse(delta_dmas[:,1:4])
-    if esps_computed:
-        delta_esps = to_numpy(torch.cat(delta_esps_list, dim=0))
-        esps = to_numpy(torch.cat(esps_list, dim=0))
-        aux["mae_esp"] = compute_mae(delta_esps)
-        aux["rel_mae_esp"] = compute_rel_mae(delta_esps, esps)
-        aux["rmse_esp"] = compute_rmse(delta_esps)
-        aux["rel_rmse_esp"] = compute_rel_rmse(delta_esps, esps)
-        aux["q95_esp"] = compute_q95(delta_esps)
-    if polarizability_computed:
-        delta_polarizability = to_numpy(torch.cat(delta_polarizability_list, dim=0))
-        delta_polarizability_per_atom = to_numpy(torch.cat(delta_polarizability_per_atom_list, dim=0))
-        aux["mae_polarizability"] = compute_mae(delta_polarizability)
-        aux["rmse_polarizability"] = compute_rmse(delta_polarizability)
-        aux["rmse_polarizability_per_atom"] = compute_rmse(delta_polarizability_per_atom)
-        aux["q95_polarizability"] = compute_q95(delta_polarizability)
-    if total_charge_computed:
-        delta_total_charge = to_numpy(torch.cat(delta_total_charge_list, dim=0))
-        aux["mae_total_charge"] = compute_mae(delta_total_charge)
-        aux["rmse_total_charge"] = compute_rmse(delta_total_charge)
-        aux["q95_total_charge"] = compute_q95(delta_total_charge)
-    if fermi_level_computed:
-        delta_fermi_level = to_numpy(torch.cat(delta_fermi_level_list, dim=0))
-        aux["mae_fermi_level"] = compute_mae(delta_fermi_level)
-        aux["rmse_fermi_level"] = compute_rmse(delta_fermi_level)
-        aux["q95_fermi_level"] = compute_q95(delta_fermi_level)
-
+    avg_loss, aux = metrics.compute()
     aux["time"] = time.time() - start_time
+    metrics.reset()
 
     for name, param in model.named_parameters():
         param.requires_grad = True
