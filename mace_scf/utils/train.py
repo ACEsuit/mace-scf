@@ -5,10 +5,8 @@ from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 import torch
-from torch.optim.swa_utils import SWALR, AveragedModel
 from torch.utils.data import DataLoader
 from torch_ema import ExponentialMovingAverage
-from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data.distributed import DistributedSampler
 
 from mace.tools import torch_geometric
