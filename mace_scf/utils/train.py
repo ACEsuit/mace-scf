@@ -108,7 +108,6 @@ def train(
     save_all_checkpoints: bool = False,
     train_sampler: Optional[DistributedSampler] = None,
     ema: Optional[ExponentialMovingAverage] = None,
-    distributed_model: Optional[DistributedDataParallel] = None,
     max_grad_norm: Optional[float] = 10.0,
     log_wandb: bool = False,
     test_loaders: Optional[dict] = None,
@@ -124,7 +123,6 @@ def train(
     if max_grad_norm is not None:
         logging.info(f"Using gradient clipping with tolerance={max_grad_norm:.3f}")
 
-    model_to_train = model if distributed_model is None else distributed_model
     epoch = start_epoch
     opt_step = 0
     while epoch <= end_epoch:
@@ -140,7 +138,7 @@ def train(
 
         for batch in train_loader:
             _, opt_metrics = take_step(
-                model=model_to_train, # TODO: remove?
+                model=model, # TODO: remove?
                 model_eval_wrapper=model_eval_wrapper,
                 loss_fn=loss_fn,
                 batch=batch,
@@ -171,7 +169,8 @@ def train(
                     # W&B's native parameter watcher is a top-level forward hook.
                     # FixedPoint training calls model submethods directly, so log
                     # parameter histograms explicitly instead of relying on forward().
-                    _log_wandb_parameter_histograms(model_to_train)
+                    # TODO: check this works with DDP
+                    _log_wandb_parameter_histograms(model)
             opt_step += 1
         if train_sampler is not None:
             torch.distributed.barrier()
