@@ -2,16 +2,11 @@
 using the plain, never-DDP-wrapped `model` reference rather than the
 DDP-wrapped `model_eval_wrapper` -- see mace_scf/utils/train.py. This only
 clips the tensors DDP actually synced if `model.parameters()` and the DDP
-wrapper's `.parameters()` are the *same* tensor objects (every wrapper
-class stores `self.model = model` by direct reference and registers no
-parameters of its own, so they are).
+wrapper's `.parameters()` are the same tensor objects.
 
 Two checks: (1) DDP-wrapping the wrapper still exposes model's parameters
-by identity (no accidental copy), and (2) running take_step() on a
-different data shard per rank still produces bit-identical post-clip
-gradients across ranks -- if clipping were operating on a stale,
-pre-all-reduce copy, each rank's differently-shaped local shard would
-produce differently-clipped gradients and this would fail.
+by identity, and (2) running take_step() on a different data shard per
+rank still produces bit-identical post-clip gradients across ranks.
 """
 
 import pytest
@@ -73,9 +68,9 @@ def _clip_and_return_grads(rank, world_size, max_grad_norm):
 
 @pytest.mark.distributed
 def test_ddp_sees_model_parameters_by_identity_and_clips_synced_grads():
-    # above gloo.py's 60s default: each worker imports the full mace_scf/mace
-    # stack and builds+forwards a real FixedPointCore model, which alone can
-    # take well over a minute on a loaded shared node.
+    # timeout_s raised above gloo.py's default: each worker imports the
+    # full mace_scf/mace stack and builds+forwards a real FixedPointCore
+    # model, which alone can take over a minute.
     results = run_gloo(
         _clip_and_return_grads,
         world_size=2,
