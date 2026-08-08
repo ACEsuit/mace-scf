@@ -160,7 +160,6 @@ class FixedPointWrapper(BaseModelWrapper):
     def _forward_direct(self, batch_dict, training):
         if training:
             for p in self.model.parameters():
-                # if type(self) == DDP: assert p.requires_grad, "Whether a parameter requires grad cannot be changed after DDP initialization."
                 p.requires_grad = True
 
         local_state = self.model.local_part(
@@ -332,7 +331,6 @@ class FixedPointWrapper(BaseModelWrapper):
 
     def _forward_linearize_solve(self, batch_dict, training):
         for p in self.model.parameters():
-            # if type(self) == DDP: assert p.requires_grad, "Whether a parameter requires grad cannot be changed after DDP initialization."
             p.requires_grad = True
 
         local_state = self.model.local_part(
