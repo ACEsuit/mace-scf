@@ -104,11 +104,9 @@ def shard_batches(model, n_shards=WORLD_SIZE, shard_size=SHARD_SIZE):
     for atoms in atoms_list:
         atoms.info["fake_energy"] = float(rng.normal())
         atoms.arrays["fake_forces"] = rng.normal(size=(len(atoms), 3))
-    # Note: mace_scf.data.update_keyspec_from_kwargs doesn't support a
-    # total_charge_key mapping, so total_charge falls back to its 0.0
-    # default regardless of the fixture file's real values -- fine here,
-    # since a nonzero predicted charge against a 0.0 target still produces
-    # a nonzero loss gradient (all this file's callers need).
+    # mace_scf.data.update_keyspec_from_kwargs has no total_charge_key
+    # mapping, so total_charge stays at its 0.0 default; a nonzero
+    # prediction against that target still yields a nonzero loss gradient.
     dataset = dataset_from_atoms(
         atoms_list,
         cutoff=float(model.r_max),
@@ -132,7 +130,7 @@ def shard_batches(model, n_shards=WORLD_SIZE, shard_size=SHARD_SIZE):
 
 
 def make_loss_fn():
-    """The production training loss (must stay collective-free, see loss.py)."""
+    """The production training loss."""
     from mace_scf.electrostatics.loss import WeightedLoss
 
     return WeightedLoss(
