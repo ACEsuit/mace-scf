@@ -311,10 +311,6 @@ def main() -> None:
     logging.info(f"Number of parameters: {tools.count_parameters(model)}")
     logging.info(f"Optimizer: {optimizer}")
 
-    if args.distributed:
-        distributed_model = DDP(model, device_ids=[local_rank])
-    else:
-        distributed_model = None
 
     # for xyzs, option to log performance on test sets during training
     test_data_loaders = None
@@ -359,12 +355,16 @@ def main() -> None:
         stage_name = train_stage["name"]
         loss_fn = mace_scf.electrostatics.loss.WeightedLoss(train_stage["loss"])
         logging.info(loss_fn)
-        eval_wrapper = mace_scf.utils.make_model_wrapper(
+        model_eval_module = mace_scf.utils.make_model_wrapper(
             model=model,
             optimizer=optimizer,
             output_args=output_args,
             fixed_point_training_options=train_stage.get("fixed_point_training_options"),
         )
+
+        if args.distributed:
+            model_eval_module = DDP(model_eval_module, device_ids=[local_rank])
+
         logging.info(f"Setting global learning rate to {train_stage['lr']}")
         for param_group in optimizer.param_groups:
             param_group["lr"] = train_stage["lr"]
@@ -392,7 +392,7 @@ def main() -> None:
 
         mace_scf.utils.train(  # this is the mace_scf train
             model=model,
-            model_eval_wrapper=eval_wrapper,
+            model_eval_wrapper=model_eval_module,
             loss_fn=loss_fn,
             train_loader=train_loader,
             valid_loader=valid_loader,
@@ -412,7 +412,6 @@ def main() -> None:
             train_sampler=train_sampler,
             max_grad_norm=args.clip_grad,
             log_errors=args.error_table,
-            distributed_model=distributed_model,
             log_wandb=args.wandb,
             debug_log_grad_summary=args.debug_log_grad_summary,
             debug_grad_log_frequency=args.wandb_watch_log_freq,
@@ -477,7 +476,7 @@ def main() -> None:
         stage_name = train_stage["name"]
         stage_tag = tag + "_" + stage_name
         loss_fn = mace_scf.electrostatics.loss.WeightedLoss(train_stage["loss"])
-        eval_wrapper = mace_scf.utils.make_model_wrapper(
+        model_eval_module = mace_scf.utils.make_model_wrapper(
             model=model,
             optimizer=optimizer,
             output_args=output_args,
@@ -497,22 +496,23 @@ def main() -> None:
             logging.warning(f"No model found for stage {stage_name}")
             continue
         logging.info(f"Loaded model from epoch {latest_checkpoint_epoch}")
-        model.to(device)
+        model_eval_module.to(device)
 
-        for param in model.parameters():
+        for param in model_eval_module.model.parameters(): 
+            # DDP requires that (at least one) model parameter(s) have requires_grad=True,
+            # but we don't want to compute gradients during evaluation.
             param.requires_grad = True
         if args.distributed:
-            distributed_model = DDP(model, device_ids=[local_rank])
-        model_to_evaluate = model if not args.distributed else distributed_model
-        for param in model.parameters():
+            model_eval_module = DDP(model_eval_module, device_ids=[local_rank])
+        for param in model_eval_module.parameters():
             param.requires_grad = False
         assert not "batch_positions" in dict(model.named_parameters()), "batch_positions should not be a parameter of the model"
 
         table = mace_scf.utils.create_error_table(
             table_type=args.error_table,
             all_data_loaders=all_data_loaders,
-            model=model_to_evaluate,
-            model_eval_wrapper=eval_wrapper,
+            model=model,
+            model_eval_wrapper=model_eval_module,
             loss_fn=loss_fn,
             log_wandb=args.wandb,
             device=device,
@@ -558,6 +558,7 @@ def main() -> None:
             model.to(device)
             if not mace_scf.utils.is_fixed_point_model(model):
                 continue
+            # TODO: implement DDP for this:
             scf_summary = mace_scf.utils.create_scf_convergence_summary(
                 model=model,
                 all_data_loaders=all_data_loaders,

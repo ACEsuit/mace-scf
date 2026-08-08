@@ -81,7 +81,7 @@ def _log_wandb_parameter_histograms(model: torch.nn.Module) -> None:
 
 
 def train(
-    model: torch.nn.Module, # TODO: remove?
+    model: torch.nn.Module,
     model_eval_wrapper,
     loss_fn: torch.nn.Module,
     train_loader: DataLoader,
@@ -135,7 +135,7 @@ def train(
 
         for batch in train_loader:
             _, opt_metrics = take_step(
-                model=model, # TODO: remove?
+                model=model,
                 model_eval_wrapper=model_eval_wrapper,
                 loss_fn=loss_fn,
                 batch=batch,
@@ -177,7 +177,7 @@ def train(
             optimizer.eval()
         if epoch % eval_interval == 0:
             valid_loss, eval_metrics = evaluate(
-                model=model, # TODO: remove?
+                model=model,
                 model_eval_wrapper=model_eval_wrapper,
                 loss_fn=loss_fn,
                 ema=ema,
@@ -186,11 +186,12 @@ def train(
             )
             eval_metrics["mode"] = "eval"
             eval_metrics["epoch"] = epoch
-            logger.log(eval_metrics)
+            if rank == 0:
+                logger.log(eval_metrics)
             if test_loaders is not None:
                 for name, loader in test_loaders.items():
                     _, test_eval_metrics = evaluate(
-                        model=model, # TODO: remove?
+                        model=model,
                         model_eval_wrapper=model_eval_wrapper,
                         loss_fn=loss_fn,
                         ema=ema,
@@ -200,8 +201,9 @@ def train(
                     test_eval_metrics["epoch"] = epoch
                     test_eval_metrics["mode"] = "eval_test"
                     test_eval_metrics["test_name"] = name
-                    logger.log(test_eval_metrics)
-            
+                    if rank == 0:
+                        logger.log(test_eval_metrics)
+
             if rank == 0:
                 valid_err_log(
                     valid_loss,
@@ -307,7 +309,7 @@ def get_attribute(obj, attr_name):
 
 
 def take_step(
-    model: torch.nn.Module, # TODO: remove?
+    model: torch.nn.Module,
     model_eval_wrapper,
     loss_fn: torch.nn.Module,
     batch: torch_geometric.batch.Batch,
