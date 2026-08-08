@@ -1,10 +1,11 @@
 import dataclasses
 import logging
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
+from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader
 from torch_ema import ExponentialMovingAverage
 from torch.utils.data.distributed import DistributedSampler
@@ -16,6 +17,7 @@ from mace.tools.utils import MetricsLogger
 import os
 
 from mace_scf.utils.eval_metrics import MaceSCFLoss
+from mace_scf.utils.model_training_wrappers import BaseObservablesModule
 
 
 def _should_log_grad_summary(opt_step: int, frequency: Optional[int]) -> bool:
@@ -82,7 +84,7 @@ def _log_wandb_parameter_histograms(model: torch.nn.Module) -> None:
 
 def train(
     model: torch.nn.Module,
-    model_eval_wrapper,
+    model_eval_wrapper: Union[BaseObservablesModule, DistributedDataParallel],
     loss_fn: torch.nn.Module,
     train_loader: DataLoader,
     valid_loader: DataLoader,
@@ -310,7 +312,7 @@ def get_attribute(obj, attr_name):
 
 def take_step(
     model: torch.nn.Module,
-    model_eval_wrapper,
+    model_eval_wrapper: Union[BaseObservablesModule, DistributedDataParallel],
     loss_fn: torch.nn.Module,
     batch: torch_geometric.batch.Batch,
     optimizer: torch.optim.Optimizer,
@@ -431,7 +433,7 @@ def take_step(
 
 def evaluate(
     model: torch.nn.Module,
-    model_eval_wrapper,
+    model_eval_wrapper: Union[BaseObservablesModule, DistributedDataParallel],
     loss_fn: torch.nn.Module,
     ema: Optional[ExponentialMovingAverage],
     data_loader: DataLoader,

@@ -31,7 +31,7 @@ def make_model_wrapper(
     optimizer: torch.optim.Optimizer,
     output_args: Dict[str, bool],
     fixed_point_training_options: FixedPointTrainingOptions = None,
-):
+) -> "BaseObservablesModule":
     model_class = model.__class__.__name__
 
 
@@ -72,24 +72,29 @@ def make_model_wrapper(
         raise ValueError(f"Model class {model_class} does not have a wrapper class")
 
 
-# TODO: create this class
-# TODO: Rename ModelWrapper to something like ModelTrainingModule
-# class BaseModelWrapper(torch.nn.Module):
-#     def __init__(
-#         self,
-#         model: torch.nn.Module,
-#         optimizer: torch.optim.Optimizer,
-#         output_args: Dict[str, bool],
-#     ):
-#         super().__init__()
-#         self.model = model
-#         self.optimizer = optimizer
-#         self.output_args = output_args
-#     def forward(self):
-#         raise NotImplementedError("BaseModelWrapper is an abstract class and cannot be used directly.")
+class BaseObservablesModule(torch.nn.Module):
+    """Abstract base for model wrappers whose forward() computes observables
+    (energy, forces, stress, dipole, etc.) from a batch, for both the
+    training forward pass and evaluation. Subclasses hold the raw model,
+    optimizer, and output_args, and implement forward() for their model's
+    training scheme (e.g. direct, FixedPoint SCF, QEq).
+    """
+
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        optimizer: torch.optim.Optimizer,
+        output_args: Dict[str, bool],
+    ):
+        super().__init__()
+        self.model = model
+        self.optimizer = optimizer
+        self.output_args = output_args
+    def forward(self):
+        raise NotImplementedError("BaseObservablesModule is an abstract class and cannot be used directly.")
 
 
-class FixedPointWrapper(torch.nn.Module):
+class FixedPointWrapper(BaseObservablesModule):
     """Training wrapper for FixedPointCore models.
 
     Supports fixed-point training modes:
@@ -108,7 +113,7 @@ class FixedPointWrapper(torch.nn.Module):
         output_args: Dict[str, bool],
         training_options: FixedPointTrainingOptions,
     ):
-        super().__init__()
+        super().__init__(model, optimizer, output_args)
         if not isinstance(training_options, FixedPointTrainingOptions):
             raise TypeError(
                 "training_options must be a FixedPointTrainingOptions instance"
@@ -118,11 +123,8 @@ class FixedPointWrapper(torch.nn.Module):
                 f"mode must be one of {self.MODES}, got {training_options.mode}"
             )
 
-        self.model = model
         self.training_options = training_options
         self.mode = training_options.mode
-        self.optimizer = optimizer
-        self.output_args = output_args
         self.scf_options = training_options.scf
 
         logging.info(
@@ -447,7 +449,7 @@ class FixedPointWrapper(torch.nn.Module):
         return output
 
 
-class DefaultModelWrapper(torch.nn.Module):
+class DefaultModelWrapper(BaseObservablesModule):
     """Training wrapper for standard MACE models (no electrostatics)."""
 
     def __init__(
@@ -456,10 +458,7 @@ class DefaultModelWrapper(torch.nn.Module):
         optimizer: torch.optim.Optimizer,
         output_args: Dict[str, bool],
     ):
-        super().__init__()
-        self.model = model
-        self.optimizer = optimizer
-        self.output_args = output_args
+        super().__init__(model, optimizer, output_args)
 
     def forward(
         self,
@@ -482,7 +481,7 @@ class DefaultModelWrapper(torch.nn.Module):
             )
 
 
-class LocalSourcesModelWrapper(torch.nn.Module):
+class LocalSourcesModelWrapper(BaseObservablesModule):
     """Training wrapper for non-polarizable local-sources models."""
 
     def __init__(
@@ -491,10 +490,7 @@ class LocalSourcesModelWrapper(torch.nn.Module):
         optimizer: torch.optim.Optimizer,
         output_args: Dict[str, bool],
     ):
-        super().__init__()
-        self.model = model
-        self.optimizer = optimizer
-        self.output_args = output_args
+        super().__init__(model, optimizer, output_args)
 
     def forward(
         self,
@@ -517,7 +513,7 @@ class LocalSourcesModelWrapper(torch.nn.Module):
             )
 
 
-class QEqModelWrapper(torch.nn.Module):
+class QEqModelWrapper(BaseObservablesModule):
     """Training wrapper for MaceQEq models."""
 
     def __init__(
@@ -526,10 +522,7 @@ class QEqModelWrapper(torch.nn.Module):
         optimizer: torch.optim.Optimizer,
         output_args: Dict[str, bool],
     ):  
-        super().__init__()
-        self.model = model
-        self.optimizer = optimizer
-        self.output_args = output_args
+        super().__init__(model, optimizer, output_args)
 
     def forward(
         self,

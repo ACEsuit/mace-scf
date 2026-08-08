@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 from prettytable import PrettyTable
+from torch.nn.parallel import DistributedDataParallel
 from torch_ema import ExponentialMovingAverage
 
 from mace.tools import AtomicNumberTable, torch_geometric
@@ -18,6 +19,7 @@ from mace.tools.tables_utils import custom_key  as mace_table_custom_key
 from mace import data
 from ..data import ExtAtomicData
 from .train import evaluate
+from .model_training_wrappers import BaseObservablesModule
 
 
 
@@ -43,7 +45,7 @@ def create_error_table(
     table_type: str,
     all_data_loaders: dict,
     model: torch.nn.Module,
-    model_eval_wrapper,
+    model_eval_wrapper: Union[BaseObservablesModule, DistributedDataParallel],
     loss_fn: torch.nn.Module,
     log_wandb: bool,
     device: str,
