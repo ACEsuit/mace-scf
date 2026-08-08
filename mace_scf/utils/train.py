@@ -17,7 +17,7 @@ from mace.tools.utils import MetricsLogger
 import os
 
 from mace_scf.utils.eval_metrics import MaceSCFLoss
-from mace_scf.utils.model_training_wrappers import BaseObservablesModule
+from mace_scf.utils.model_training_wrappers import BaseModelWrapper
 
 
 def _should_log_grad_summary(opt_step: int, frequency: Optional[int]) -> bool:
@@ -84,7 +84,7 @@ def _log_wandb_parameter_histograms(model: torch.nn.Module) -> None:
 
 def train(
     model: torch.nn.Module,
-    model_eval_wrapper: Union[BaseObservablesModule, DistributedDataParallel],
+    model_wrapper: Union[BaseModelWrapper, DistributedDataParallel],
     loss_fn: torch.nn.Module,
     train_loader: DataLoader,
     valid_loader: DataLoader,
@@ -138,7 +138,7 @@ def train(
         for batch in train_loader:
             _, opt_metrics = take_step(
                 model=model,
-                model_eval_wrapper=model_eval_wrapper,
+                model_wrapper=model_wrapper,
                 loss_fn=loss_fn,
                 batch=batch,
                 optimizer=optimizer,
@@ -180,7 +180,7 @@ def train(
         if epoch % eval_interval == 0:
             valid_loss, eval_metrics = evaluate(
                 model=model,
-                model_eval_wrapper=model_eval_wrapper,
+                model_wrapper=model_wrapper,
                 loss_fn=loss_fn,
                 ema=ema,
                 data_loader=valid_loader,
@@ -194,7 +194,7 @@ def train(
                 for name, loader in test_loaders.items():
                     _, test_eval_metrics = evaluate(
                         model=model,
-                        model_eval_wrapper=model_eval_wrapper,
+                        model_wrapper=model_wrapper,
                         loss_fn=loss_fn,
                         ema=ema,
                         data_loader=loader,
@@ -312,7 +312,7 @@ def get_attribute(obj, attr_name):
 
 def take_step(
     model: torch.nn.Module,
-    model_eval_wrapper: Union[BaseObservablesModule, DistributedDataParallel],
+    model_wrapper: Union[BaseModelWrapper, DistributedDataParallel],
     loss_fn: torch.nn.Module,
     batch: torch_geometric.batch.Batch,
     optimizer: torch.optim.Optimizer,
@@ -329,7 +329,7 @@ def take_step(
     batch_dict = batch.to_dict()
 
     # do not set ema when training
-    output = model_eval_wrapper(
+    output = model_wrapper(
         batch_dict,
         training=True,
     )
@@ -358,7 +358,7 @@ def take_step(
         the_weight.copy_(initial_value)
         the_weight.requires_grad_(True)
 
-        output = model_eval_wrapper(
+        output = model_wrapper(
             batch_dict,
             training=True,
         )
@@ -387,7 +387,7 @@ def take_step(
         the_weight.copy_(initial_value)
         the_weight.requires_grad_(True)
 
-        output = model_eval_wrapper(
+        output = model_wrapper(
             batch_dict,
             training=True,
         )
@@ -433,7 +433,7 @@ def take_step(
 
 def evaluate(
     model: torch.nn.Module,
-    model_eval_wrapper: Union[BaseObservablesModule, DistributedDataParallel],
+    model_wrapper: Union[BaseModelWrapper, DistributedDataParallel],
     loss_fn: torch.nn.Module,
     ema: Optional[ExponentialMovingAverage],
     data_loader: DataLoader,
@@ -451,7 +451,7 @@ def evaluate(
     for batch in data_loader:
         batch = batch.to(device)
         batch_dict = batch.to_dict()
-        output = model_eval_wrapper(
+        output = model_wrapper(
             batch_dict,
             training=False,
             ema=ema,

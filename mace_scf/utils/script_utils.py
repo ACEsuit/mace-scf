@@ -19,7 +19,7 @@ from mace.tools.tables_utils import custom_key  as mace_table_custom_key
 from mace import data
 from ..data import ExtAtomicData
 from .train import evaluate
-from .model_training_wrappers import BaseObservablesModule
+from .model_training_wrappers import BaseModelWrapper
 
 
 
@@ -45,7 +45,7 @@ def create_error_table(
     table_type: str,
     all_data_loaders: dict,
     model: torch.nn.Module,
-    model_eval_wrapper: Union[BaseObservablesModule, DistributedDataParallel],
+    model_wrapper: Union[BaseModelWrapper, DistributedDataParallel],
     loss_fn: torch.nn.Module,
     log_wandb: bool,
     device: str,
@@ -123,7 +123,7 @@ def create_error_table(
         logging.info(f"Evaluating {name} ...")
         _, metrics = evaluate(
             model,
-            model_eval_wrapper=model_eval_wrapper,
+            model_wrapper=model_wrapper,
             ema=None,
             loss_fn=loss_fn,
             data_loader=data_loader,

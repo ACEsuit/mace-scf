@@ -31,7 +31,7 @@ def make_model_wrapper(
     optimizer: torch.optim.Optimizer,
     output_args: Dict[str, bool],
     fixed_point_training_options: FixedPointTrainingOptions = None,
-) -> "BaseObservablesModule":
+) -> "BaseModelWrapper":
     model_class = model.__class__.__name__
 
 
@@ -72,12 +72,8 @@ def make_model_wrapper(
         raise ValueError(f"Model class {model_class} does not have a wrapper class")
 
 
-class BaseObservablesModule(torch.nn.Module):
-    """Abstract base for model wrappers whose forward() computes observables
-    (energy, forces, stress, dipole, etc.) from a batch, for both the
-    training forward pass and evaluation. Subclasses hold the raw model,
-    optimizer, and output_args, and implement forward() for their model's
-    training scheme (e.g. direct, FixedPoint SCF, QEq).
+class BaseModelWrapper(torch.nn.Module):
+    """Abstract base for model wrappers whose forward() computes observables.
     """
 
     def __init__(
@@ -91,10 +87,10 @@ class BaseObservablesModule(torch.nn.Module):
         self.optimizer = optimizer
         self.output_args = output_args
     def forward(self):
-        raise NotImplementedError("BaseObservablesModule is an abstract class and cannot be used directly.")
+        raise NotImplementedError("BaseModelWrapper is an abstract class and cannot be used directly.")
 
 
-class FixedPointWrapper(BaseObservablesModule):
+class FixedPointWrapper(BaseModelWrapper):
     """Training wrapper for FixedPointCore models.
 
     Supports fixed-point training modes:
@@ -449,7 +445,7 @@ class FixedPointWrapper(BaseObservablesModule):
         return output
 
 
-class DefaultModelWrapper(BaseObservablesModule):
+class DefaultModelWrapper(BaseModelWrapper):
     """Training wrapper for standard MACE models (no electrostatics)."""
 
     def __init__(
@@ -481,7 +477,7 @@ class DefaultModelWrapper(BaseObservablesModule):
             )
 
 
-class LocalSourcesModelWrapper(BaseObservablesModule):
+class LocalSourcesModelWrapper(BaseModelWrapper):
     """Training wrapper for non-polarizable local-sources models."""
 
     def __init__(
@@ -513,7 +509,7 @@ class LocalSourcesModelWrapper(BaseObservablesModule):
             )
 
 
-class QEqModelWrapper(BaseObservablesModule):
+class QEqModelWrapper(BaseModelWrapper):
     """Training wrapper for MaceQEq models."""
 
     def __init__(

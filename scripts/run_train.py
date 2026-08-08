@@ -355,7 +355,7 @@ def main() -> None:
         stage_name = train_stage["name"]
         loss_fn = mace_scf.electrostatics.loss.WeightedLoss(train_stage["loss"])
         logging.info(loss_fn)
-        model_eval_module = mace_scf.utils.make_model_wrapper(
+        model_wrapper = mace_scf.utils.make_model_wrapper(
             model=model,
             optimizer=optimizer,
             output_args=output_args,
@@ -363,7 +363,7 @@ def main() -> None:
         )
 
         if args.distributed:
-            model_eval_module = DDP(model_eval_module, device_ids=[local_rank])
+            model_wrapper = DDP(model_wrapper, device_ids=[local_rank])
 
         logging.info(f"Setting global learning rate to {train_stage['lr']}")
         for param_group in optimizer.param_groups:
@@ -392,7 +392,7 @@ def main() -> None:
 
         mace_scf.utils.train(  # this is the mace_scf train
             model=model,
-            model_eval_wrapper=model_eval_module,
+            model_wrapper=model_wrapper,
             loss_fn=loss_fn,
             train_loader=train_loader,
             valid_loader=valid_loader,
@@ -476,7 +476,7 @@ def main() -> None:
         stage_name = train_stage["name"]
         stage_tag = tag + "_" + stage_name
         loss_fn = mace_scf.electrostatics.loss.WeightedLoss(train_stage["loss"])
-        model_eval_module = mace_scf.utils.make_model_wrapper(
+        model_wrapper = mace_scf.utils.make_model_wrapper(
             model=model,
             optimizer=optimizer,
             output_args=output_args,
@@ -496,15 +496,15 @@ def main() -> None:
             logging.warning(f"No model found for stage {stage_name}")
             continue
         logging.info(f"Loaded model from epoch {latest_checkpoint_epoch}")
-        model_eval_module.to(device)
+        model_wrapper.to(device)
 
-        for param in model_eval_module.model.parameters(): 
+        for param in model_wrapper.model.parameters(): 
             # DDP requires that (at least one) model parameter(s) have requires_grad=True,
             # but we don't want to compute gradients during evaluation.
             param.requires_grad = True
         if args.distributed:
-            model_eval_module = DDP(model_eval_module, device_ids=[local_rank])
-        for param in model_eval_module.parameters():
+            model_wrapper = DDP(model_wrapper, device_ids=[local_rank])
+        for param in model_wrapper.parameters():
             param.requires_grad = False
         assert not "batch_positions" in dict(model.named_parameters()), "batch_positions should not be a parameter of the model"
 
@@ -512,7 +512,7 @@ def main() -> None:
             table_type=args.error_table,
             all_data_loaders=all_data_loaders,
             model=model,
-            model_eval_wrapper=model_eval_module,
+            model_wrapper=model_wrapper,
             loss_fn=loss_fn,
             log_wandb=args.wandb,
             device=device,

@@ -1,6 +1,6 @@
 """take_step() clips gradients via `clip_grad_norm_(model.parameters(), ...)`
 using the plain, never-DDP-wrapped `model` reference rather than the
-DDP-wrapped `model_eval_wrapper` -- see mace_scf/utils/train.py. This only
+DDP-wrapped `model_wrapper` -- see mace_scf/utils/train.py. This only
 clips the tensors DDP actually synced if `model.parameters()` and the DDP
 wrapper's `.parameters()` are the same tensor objects.
 
@@ -48,7 +48,7 @@ def _clip_and_return_grads(rank, world_size, max_grad_norm):
 
     _, loss_dict = take_step(
         model=model,
-        model_eval_wrapper=ddp_wrapper,
+        model_wrapper=ddp_wrapper,
         loss_fn=loss_fn,
         batch=batch,
         optimizer=optimizer,
