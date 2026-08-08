@@ -168,7 +168,6 @@ def train(
                     # W&B's native parameter watcher is a top-level forward hook.
                     # FixedPoint training calls model submethods directly, so log
                     # parameter histograms explicitly instead of relying on forward().
-                    # TODO: check this works with DDP
                     _log_wandb_parameter_histograms(model)
             opt_step += 1
         if train_sampler is not None:
