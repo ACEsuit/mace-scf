@@ -529,10 +529,24 @@ def main() -> None:
                 model = model.to("cpu")
             torch.save(model, model_path)
             torch.save(model, Path(args.model_dir) / (args.name + "_" + stage_name + ".model"))
-            stages_with_models.append((train_stage, stage_tag))
+        # stage_tag is deterministic (derived from args.name/args.seed/stage_name),
+        # so every rank can build this list identically without a broadcast.
+        stages_with_models.append((train_stage, stage_tag))
 
-    if rank == 0 and args.scf_convergence_summary:
-        logging.info("Computing SCF convergence summaries")
+    if args.scf_convergence_summary:
+        # rank 0 alone should log (the summary itself is identical on every
+        # rank after all_gather_object, so logging it everywhere would just
+        # duplicate output).
+        def log0(fn, msg, *fmt_args):
+            if rank == 0:
+                fn(msg, *fmt_args)
+
+        if args.distributed:
+            # create_scf_convergence_summary all-gathers across ranks, so every
+            # rank must run it; wait for rank 0 to finish writing checkpoints
+            # (read from shared storage below) before proceeding.
+            torch.distributed.barrier()
+        log0(logging.info, "Computing SCF convergence summaries")
         for train_stage, stage_tag in stages_with_models:
             stage_name = train_stage["name"]
             checkpoint_handler_stage = tools.CheckpointHandler(
@@ -546,11 +560,13 @@ def main() -> None:
                 device=device,
             )
             if latest_checkpoint_epoch is None:
-                logging.warning(
-                    f"No model found for SCF convergence summary stage {stage_name}"
+                log0(
+                    logging.warning,
+                    f"No model found for SCF convergence summary stage {stage_name}",
                 )
                 continue
-            logging.info(
+            log0(
+                logging.info,
                 "Loaded model from epoch %s for SCF convergence summary stage %s",
                 latest_checkpoint_epoch,
                 stage_name,
@@ -558,7 +574,6 @@ def main() -> None:
             model.to(device)
             if not mace_scf.utils.is_fixed_point_model(model):
                 continue
-            # TODO: implement DDP for this:
             scf_summary = mace_scf.utils.create_scf_convergence_summary(
                 model=model,
                 all_data_loaders=all_data_loaders,
@@ -568,7 +583,7 @@ def main() -> None:
                 error_table_type=args.error_table,
                 diagnostic_batch_size=args.valid_batch_size,
             )
-            logging.info("\n" + scf_summary)
+            log0(logging.info, "\n" + scf_summary)
 
     logging.info("Done")
 
