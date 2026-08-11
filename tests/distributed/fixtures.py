@@ -88,14 +88,13 @@ def build_model(device="cpu"):
     return model.to(device)
 
 
-def shard_batches(model, n_shards=WORLD_SIZE, shard_size=SHARD_SIZE):
-    """n_shards Batch objects, sharding n_shards*shard_size fixture configs.
+def _build_dataset(model, num_configs):
+    """A dataset of num_configs fixture configs with synthetic targets.
 
     The fixture provides multipoles, total_charge, and a fermi level;
     deterministic synthetic energies and forces are added so the loss
     exercises the upstream mace energy/forces components too.
     """
-    num_configs = n_shards * shard_size
     atoms_list = read(str(CONFIGS_PATH), index=":")[:num_configs]
     if len(atoms_list) < num_configs:
         # Fixture file is small; repeat configs deterministically to fill shards.
@@ -107,7 +106,7 @@ def shard_batches(model, n_shards=WORLD_SIZE, shard_size=SHARD_SIZE):
     # mace_scf.data.update_keyspec_from_kwargs has no total_charge_key
     # mapping, so total_charge stays at its 0.0 default; a nonzero
     # prediction against that target still yields a nonzero loss gradient.
-    dataset = dataset_from_atoms(
+    return dataset_from_atoms(
         atoms_list,
         cutoff=float(model.r_max),
         atomic_multipoles_key="some_multipoles",
@@ -116,6 +115,12 @@ def shard_batches(model, n_shards=WORLD_SIZE, shard_size=SHARD_SIZE):
         forces_key="fake_forces",
         atomic_multipoles_max_l=ATOMIC_MULTIPOLES_MAX_L,
     )
+
+
+def shard_batches(model, n_shards=WORLD_SIZE, shard_size=SHARD_SIZE):
+    """n_shards Batch objects, sharding n_shards*shard_size fixture configs."""
+    num_configs = n_shards * shard_size
+    dataset = _build_dataset(model, num_configs)
     shards = [
         dataset[start : start + shard_size]
         for start in range(0, num_configs, shard_size)
@@ -127,6 +132,87 @@ def shard_batches(model, n_shards=WORLD_SIZE, shard_size=SHARD_SIZE):
         )
         batches.append(next(iter(loader)))
     return batches
+
+
+def build_train_kwargs(
+    tmp_dir,
+    rank,
+    world_size,
+    *,
+    patience=1,
+    lr=0.0,
+    end_epoch=5,
+    eval_interval=1,
+):
+    """kwargs for mace_scf.utils.train.train(), wired the same way
+    scripts/run_train.py wires a --distributed run: a DistributedSampler'd
+    train_loader (needed for train()'s exit_now broadcast to engage), a
+    DDP-wrapped FixedPointWrapper, and a shared MetricsLogger/
+    CheckpointHandler under tmp_dir.
+    """
+    from types import SimpleNamespace
+
+    from mace.tools.checkpoint import CheckpointHandler
+    from mace.tools.scripts_utils import LRScheduler
+    from mace.tools.utils import MetricsLogger
+    from torch.nn.parallel import DistributedDataParallel as DDP
+    from torch.utils.data.distributed import DistributedSampler
+
+    from mace_scf.electrostatics.fixed_point_state import FixedPointTrainingOptions
+    from mace_scf.utils.model_training_wrappers import FixedPointWrapper
+
+    model = build_model()
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+    wrapper = FixedPointWrapper(
+        model=model,
+        optimizer=optimizer,
+        output_args=OUTPUT_ARGS,
+        training_options=FixedPointTrainingOptions(
+            mode="direct", scf=None, linear_solve="inverse"
+        ),
+    )
+    model_wrapper = DDP(wrapper)
+    lr_scheduler = LRScheduler(
+        optimizer,
+        SimpleNamespace(scheduler="ExponentialLR", optimizer="sgd", lr_scheduler_gamma=1.0),
+    )
+
+    dataset = _build_dataset(model, NUM_CONFIGS)
+    train_sampler = DistributedSampler(
+        dataset, num_replicas=world_size, rank=rank, shuffle=False, drop_last=True
+    )
+    train_loader = mace.tools.torch_geometric.dataloader.DataLoader(
+        dataset=dataset,
+        batch_size=SHARD_SIZE,
+        sampler=train_sampler,
+        shuffle=False,
+        drop_last=True,
+    )
+    valid_loader = mace.tools.torch_geometric.dataloader.DataLoader(
+        dataset=dataset, batch_size=NUM_CONFIGS, shuffle=False, drop_last=False
+    )
+
+    return dict(
+        model=model,
+        model_wrapper=model_wrapper,
+        loss_fn=make_loss_fn(),
+        train_loader=train_loader,
+        valid_loader=valid_loader,
+        optimizer=optimizer,
+        lr_scheduler=lr_scheduler,
+        start_epoch=0,
+        end_epoch=end_epoch,
+        patience=patience,
+        checkpoint_handler=CheckpointHandler(
+            directory=str(tmp_dir) + "/checkpoints", tag="early_stop_test", keep=False
+        ),
+        logger=MetricsLogger(directory=str(tmp_dir), tag="train"),
+        eval_interval=eval_interval,
+        device=torch.device("cpu"),
+        log_errors="PerAtomRMSE",
+        rank=rank,
+        train_sampler=train_sampler,
+    )
 
 
 def make_loss_fn():
