@@ -9,13 +9,8 @@
    calculator. With a sufficiently small smearing width the GTO Coulomb
    energy (with the smeared self-energy subtracted) reproduces the
    point-charge Ewald result to ~1e-5.
-4. Analytic stress against a central finite difference in the applied strain.
-   This is the only test that exercises the cell-gradient path: the reported
-   stress combines a positions/displacement term with a k-space term that
-   reaches autograd solely through ``cell.requires_grad_(True)`` in
-   ``GTOCoulombCalculator.calculate``. Without that line ``cell_virials``
-   comes back ``None`` (masked by ``allow_unused=True``) and the k-space
-   contribution silently disappears.
+4. Analytic stress against a central finite difference in the applied strain;
+   test exercising the cell-gradient path in ``GTOCoulombCalculator.calculate``.
 """
 
 import math
@@ -168,10 +163,7 @@ def test_nacl_matches_matscipy_ewald():
 _STRESS_Q = 0.7
 _STRESS_SIGMA = 0.6
 
-# Triclinic and with both atoms off any symmetry axis, so that all six
-# independent stress components are non-trivial. A cubic cell with a
-# symmetric charge arrangement would leave the shear terms at zero and the
-# comparison would pass vacuously.
+# Triclinic with off-axis atoms, so all six stress components are non-trivial.
 _STRESS_CELL = np.array(
     [
         [7.0, 0.0, 0.0],
@@ -190,10 +182,8 @@ _STRESS_SCALED_POSITIONS = np.array(
 def _strained_pair(strain: np.ndarray | None = None) -> Atoms:
     """Two opposite charges in a triclinic periodic cell, optionally strained.
 
-    Positions are set from *scaled* coordinates so that straining the cell
-    carries the atoms with it. That reproduces exactly the transformation
-    ``get_symmetric_displacement`` applies internally, where both cell and
-    positions are right-multiplied by ``(I + strain)``.
+    Positions are scaled coordinates, matching how ``get_symmetric_displacement``
+    strains cell and positions together.
     """
     cell = _STRESS_CELL
     if strain is not None:
@@ -216,27 +206,12 @@ def _stress_calculator() -> GTOCoulombCalculator:
 
 
 def _energy_at_strain(strain: np.ndarray | None) -> float:
-    # A fresh calculator per evaluation, so no result caching in the ASE
-    # Calculator base class can leak between strained configurations.
+    # Fresh calculator: avoids ASE result caching across strained configs.
     atoms = _strained_pair(strain)
     atoms.calc = _stress_calculator()
     return atoms.get_potential_energy()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "compute_forces_virials_cellstress (mace_scf/electrostatics/utils.py) "
-        "folds dE/dcell into the virial with an elementwise product, "
-        "`cell_virials *= cell`, where the chain rule for cell -> cell @ (I + eps) "
-        "requires the matrix product cell.T @ dE/dcell. Verified numerically: "
-        "with the matmul the analytic stress reproduces this finite difference "
-        "to ~2e-9, with the elementwise product it is off by ~4e-1. Fixing it "
-        "changes stress for every LocalSources model too, so the golden "
-        "*.expected.xyz files must be regenerated from the real reference "
-        "models in the same change."
-    ),
-)
 def test_stress_matches_finite_difference_strain():
     atoms = _strained_pair()
     atoms.calc = _stress_calculator()
@@ -248,9 +223,7 @@ def test_stress_matches_finite_difference_strain():
 
     for i in range(3):
         for j in range(i, 3):
-            # Symmetric strain: for i == j the two increments add to give
-            # eps_ii = delta; for i != j they give eps_ij = eps_ji = delta/2,
-            # so in both cases dE = V * sigma_ij * delta.
+            # Symmetric strain so dE = V * sigma_ij * delta in both the i==j and i!=j cases.
             strain = np.zeros((3, 3))
             strain[i, j] += 0.5 * delta
             strain[j, i] += 0.5 * delta
@@ -261,8 +234,6 @@ def test_stress_matches_finite_difference_strain():
             numerical[i, j] = value
             numerical[j, i] = value
 
-    # Guard against a vacuous pass: if the analytic stress collapsed to zero
-    # the allclose below would still succeed against a zero finite difference.
     assert np.max(np.abs(analytic)) > 1e-6, (
         f"analytic stress is ~zero, test would be vacuous: {analytic}"
     )
