@@ -24,48 +24,6 @@ def _should_log_grad_summary(opt_step: int, frequency: Optional[int]) -> bool:
     return frequency is not None and frequency > 0 and opt_step % frequency == 0
 
 
-def _optimizer_state_summary(
-    optimizer: torch.optim.Optimizer, model: torch.nn.Module
-) -> Dict[str, Any]:
-    """Summarize the optimizer's accumulated per-parameter second-moment
-    state (exp_avg_sq, as tracked by AdamW/AdamWScheduleFree) as it stands
-    immediately before this step's update is applied -- i.e. the
-    denominator this step's (possibly clipped) gradient is about to be
-    divided by. A small accumulated denominator lets an occasional
-    large-but-clipped gradient translate into a disproportionately large
-    actual parameter update, which clip_grad_norm_ alone does not bound.
-    """
-    sq_sum = 0.0
-    sq_count = 0
-    sq_min = float("inf")
-    sq_max = 0.0
-
-    with torch.no_grad():
-        for name, param in model.named_parameters():
-            if name == "batch_positions":
-                continue
-            state = optimizer.state.get(param)
-            if not state or "exp_avg_sq" not in state:
-                continue
-            denom = torch.sqrt(state["exp_avg_sq"].detach())
-            finite_mask = torch.isfinite(denom)
-            if not torch.any(finite_mask):
-                continue
-            finite_denom = denom[finite_mask]
-            sq_sum += float(torch.sum(finite_denom * finite_denom).item())
-            sq_count += int(finite_denom.numel())
-            sq_min = min(sq_min, float(torch.min(finite_denom).item()))
-            sq_max = max(sq_max, float(torch.max(finite_denom).item()))
-
-    rms_denom = (sq_sum / sq_count) ** 0.5 if sq_count > 0 else float("nan")
-    return {
-        "opt_state/exp_avg_sq_sqrt_rms": rms_denom,
-        "opt_state/exp_avg_sq_sqrt_min": sq_min if sq_count > 0 else float("nan"),
-        "opt_state/exp_avg_sq_sqrt_max": sq_max,
-        "opt_state/tracked_param_count": sq_count,
-    }
-
-
 def _scalar_param_grad_summary(model: torch.nn.Module) -> Dict[str, Any]:
     param_norm_sq = 0.0
     grad_norm_sq = 0.0
@@ -464,9 +422,6 @@ def take_step(
     
     if hasattr(model, "batch_positions"):
         del model.batch_positions
-
-    if debug_log_grad_summary and _should_log_grad_summary(opt_step, debug_grad_log_frequency):
-        loss_dict.update(_optimizer_state_summary(optimizer, model))
 
     optimizer.step()
     if ema is not None:
