@@ -514,7 +514,7 @@ def main() -> None:
             model=model,
             model_wrapper=model_wrapper,
             loss_fn=loss_fn,
-            log_wandb=args.wandb,
+            log_wandb=args.wandb and rank == 0,
             device=device,
             distributed=args.distributed,
         )
