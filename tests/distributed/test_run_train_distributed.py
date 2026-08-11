@@ -1,21 +1,29 @@
 """Two-rank GPU integration smoke tests of scripts/run_train.py --distributed.
 
 Unlike the rest of tests/distributed/ (fast, CPU-only, gloo-via-mp.spawn),
-this exercises the real CLI entrypoint end to end and needs 2 CUDA GPUs
-inside an active SLURM allocation: scripts/run_train.py always uses the
-nccl backend and torch.cuda.set_device() under --distributed, with no
-CPU/gloo path.
+this uses two GPUs.
 
 Launched with --launcher slurm (via `srun`), not torchrun:
 mace.tools.slurm_distributed.DistributedEnvironment always prefers SLURM's
 own env vars when present, so a torchrun rendezvous nested inside a SLURM
 allocation gets its rank/world_size silently overridden.
 
-Skips cleanly outside a suitable environment. To run for real, from inside
-a SLURM allocation with 2 GPUs (adjust flags for your cluster's partition
-and GPU request syntax), e.g.:
-    srun --nodes=1 --gres=gpu:2 --pty \\
-        pytest tests/distributed/test_run_train_distributed.py -v
+Skips cleanly outside a suitable environment. This file's own
+_srun_command_prefix() runs a *nested* `srun --ntasks=2 ...` step inside
+whatever allocation pytest is already running under -- that nested step
+needs the outer allocation to reserve 2 tasks up front
+(--ntasks-per-node=2), not a single-task allocation with a bigger
+--cpus-per-task for pytest itself to subdivide; the latter reliably fails
+with "More processors requested than permitted" or hangs retrying "node is
+busy", no matter how the CPU count is tuned. Use sbatch, not a bare
+interactive srun
+    #SBATCH --partition=gpu
+    #SBATCH --constraint="gpu"
+    #SBATCH --gres=gpu:a100:2
+    #SBATCH --ntasks-per-node=2
+    #SBATCH --cpus-per-task=<relevant fraction of total cores>
+    module load cuda/<version>
+    python -m pytest tests/distributed/test_run_train_distributed.py -v
 """
 
 import os
