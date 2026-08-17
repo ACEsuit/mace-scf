@@ -110,7 +110,13 @@ def main() -> None:
 
     # Setup, logging and seeds
     tools.set_seeds(args.seed)
-    tools.setup_logger(level=args.log_level, tag=tag, directory=args.log_dir, rank=rank)
+    mace_scf.utils.setup_logger(
+        level=args.log_level,
+        tag=tag,
+        directory=args.log_dir,
+        rank=rank,
+        log_all_ranks=args.log_all_ranks,
+    )
     if args.distributed:
         logging.info(f"Process group initialized: {torch.distributed.is_initialized()}")
         logging.info(f"Processes: {world_size}")

@@ -228,6 +228,16 @@ def extended_arg_parser() -> argparse.ArgumentParser:
         help="Log scalar parameter and gradient summaries during optimization.",
     )
     parser.add_argument(
+        "--log-all-ranks",
+        action="store_true",
+        default=False,
+        help=(
+            "In distributed training, write each rank's log records to its own "
+            "'{tag}_rank{rank}.log'/'{tag}_rank{rank}_debug.log' file under "
+            "--log_dir, instead of only logging on rank 0."
+        ),
+    )
+    parser.add_argument(
         "--fixedpoint-initial-charge-head-scale",
         type=float,
         default=0.01,

@@ -5,4 +5,6 @@ from .scf_convergence_summary import create_scf_convergence_summary, is_fixed_po
 
 from .extend_arg_parse import extended_arg_parser
 
+from .logging import setup_logger
+
 from .model_training_wrappers import make_model_wrapper
