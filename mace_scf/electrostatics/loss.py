@@ -36,8 +36,8 @@ def weighted_mean_squared_error_charge_extensive(ref: Batch, pred: TensorDict, d
         src=pred["density_coefficients"][:,0], index=ref["batch"], dim=-1, dim_size=num_graphs
     ) # [n_graphs, ]
 
-    weighted_square_deviations = configs_weight * torch.square(ref["total_charge"] - total_charge)
-    return reduce_loss(weighted_square_deviations, ddp)
+    weighted_squared_deviations = configs_weight * torch.square(ref["total_charge"] - total_charge)
+    return reduce_loss(weighted_squared_deviations, ddp)
 
 
 def weighted_mean_squared_error_fermi(ref: Batch, pred: TensorDict, ddp: Optional[bool] = None) -> torch.Tensor:
@@ -194,7 +194,8 @@ def weighted_mean_squared_cluster_virial(
     configs_weight = ref.weight.view(-1, 1)  # [n_graphs, 1]
     configs_cluster_virial_weight = ref.cluster_loss_weight.view(-1, 1)  # [n_graphs, 1]
 
-    return torch.mean(configs_weight * configs_cluster_virial_weight * torch.square(config_delta_work) / num_atoms)
+    weighted_squared_deviations = configs_weight * configs_cluster_virial_weight * torch.square(config_delta_work) / num_atoms
+    return reduce_loss(weighted_squared_deviations, ddp)
 
 
 def weighted_mean_squared_molecular_forces(
@@ -220,17 +221,14 @@ def weighted_mean_squared_molecular_forces(
 def fermi_level_gradient_function(
     ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
 ) -> torch.Tensor:
-    return torch.mean(torch.relu(pred["dq_dmu"]))
+    return reduce_loss(torch.relu(pred["dq_dmu"]), ddp)
 
 
 def final_terms_fixedpoint_scf_stability(
-    ref: Batch, pred: TensorDict
+    ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
 ) -> torch.Tensor:
-    num_graphs = ref.ptr.numel() - 1
     difference = pred["charges_history"][...,-1] - pred["charges_history"][...,-2]
-    return torch.mean(
-        torch.abs(difference)
-    )
+    return reduce_loss(torch.abs(difference), ddp)
 
 
 class FixedPointStability(torch.nn.Module):
@@ -240,9 +238,9 @@ class FixedPointStability(torch.nn.Module):
             self.activation = torch.nn.Softplus(beta=beta, threshold=20.0)
         else:
             self.activation = torch.nn.relu
-        self.offset = offset    
-    
-    def __call__(self, ref: Batch, pred: TensorDict) -> torch.Tensor:
+        self.offset = offset
+
+    def __call__(self, ref: Batch, pred: TensorDict, ddp: Optional[bool] = None) -> torch.Tensor:
         num_graphs = ref.ptr.numel() - 1
         # scf_random_vector_stability_loss: [n_graphs, 1]
         perturbation_norms = scatter_sum(
@@ -251,7 +249,7 @@ class FixedPointStability(torch.nn.Module):
         output_norms = scatter_sum(
             pred["perturbed_density"] ** 2, ref["batch"], dim=0, dim_size=num_graphs
         )
-        return torch.mean(self.activation(output_norms / perturbation_norms - self.offset))
+        return reduce_loss(self.activation(output_norms / perturbation_norms - self.offset), ddp)
 
 
 _LOSS_FUNCTIONS = {
