@@ -109,7 +109,7 @@ def main() -> None:
         rank = int(0)
 
     # Setup, logging and seeds
-    tools.set_seeds(args.seed)
+    tools.set_seeds(args.seed + rank)
     mace_scf.utils.setup_logger(
         level=args.log_level,
         tag=tag,
