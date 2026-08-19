@@ -15,6 +15,17 @@ STEP_RE = re.compile(r"step\s+(\d+), .*abs_change[s]?=([-+0-9.eE]+)")
 CONVERGED_RE = re.compile(r"(?:SCF\s+)?converged at step\s+(\d+).*abs_change[s]?=([-+0-9.eE]+)", re.IGNORECASE)
 DIVERGED_RE = re.compile(r"SCF diverged at step\s+(\d+).*abs_change[s]?=([-+0-9.eE]+)", re.IGNORECASE)
 TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} ")
+DEVICE_RE = re.compile(r"device='([^']+)'")
+
+# Used for lines with no device= annotation (e.g. single-process runs, or the
+# constant-fermi/constant-charge formats which never print a device), so that
+# all such lines share one SCF trajectory, matching pre-multi-GPU behaviour.
+DEFAULT_DEVICE_KEY = "default"
+
+
+def _extract_device(line: str) -> str:
+    device_match = DEVICE_RE.search(line)
+    return device_match.group(1) if device_match is not None else DEFAULT_DEVICE_KEY
 
 
 def infer_fit_name(log_path: Path) -> str:
@@ -64,8 +75,12 @@ def _finalize_record(records, current_record):
 
 
 def parse_scf_log(log_path: Path):
+    # Multiple ranks/devices interleave their SCF-step debug lines in the same
+    # log file (each rank runs its own independent SCF solve concurrently), so
+    # trajectories are tracked per-device rather than as one global sequence -
+    # otherwise lines from different devices get stitched into bogus records.
     current_epoch = 0
-    current_record = None
+    current_records = {}
     records = []
     solve_index = 0
     epoch_boundaries = []
@@ -80,6 +95,8 @@ def parse_scf_log(log_path: Path):
 
         converged_match = CONVERGED_RE.search(line)
         if converged_match is not None:
+            device = _extract_device(line)
+            current_record = current_records.get(device)
             if current_record is None:
                 current_record = {
                     "solve_index": solve_index,
@@ -94,11 +111,13 @@ def parse_scf_log(log_path: Path):
             current_record["status"] = "converged"
             current_record["final_step"] = int(converged_match.group(1))
             current_record["final_abs_change"] = float(converged_match.group(2))
-            current_record = _finalize_record(records, current_record)
+            current_records[device] = _finalize_record(records, current_record)
             continue
 
         diverged_match = DIVERGED_RE.search(line)
         if diverged_match is not None:
+            device = _extract_device(line)
+            current_record = current_records.get(device)
             if current_record is None:
                 current_record = {
                     "solve_index": solve_index,
@@ -113,18 +132,20 @@ def parse_scf_log(log_path: Path):
             current_record["status"] = "diverged"
             current_record["final_step"] = int(diverged_match.group(1))
             current_record["final_abs_change"] = float(diverged_match.group(2))
-            current_record = _finalize_record(records, current_record)
+            current_records[device] = _finalize_record(records, current_record)
             continue
 
         step_match = STEP_RE.search(line)
         if step_match is None:
             continue
 
+        device = _extract_device(line)
+        current_record = current_records.get(device)
         step_index = int(step_match.group(1))
         abs_change = float(step_match.group(2))
         if step_index == 0:
-            current_record = _finalize_record(records, current_record)
-            current_record = {
+            _finalize_record(records, current_record)
+            current_records[device] = {
                 "solve_index": solve_index,
                 "epoch": current_epoch,
                 "status": "unknown",
@@ -135,7 +156,7 @@ def parse_scf_log(log_path: Path):
             }
             solve_index += 1
         elif current_record is None:
-            current_record = {
+            current_records[device] = {
                 "solve_index": solve_index,
                 "epoch": current_epoch,
                 "status": "unknown",
@@ -149,7 +170,9 @@ def parse_scf_log(log_path: Path):
             current_record["last_step"] = step_index
             current_record["last_abs_change"] = abs_change
 
-    _finalize_record(records, current_record)
+    for current_record in current_records.values():
+        _finalize_record(records, current_record)
+    records.sort(key=lambda record: record["solve_index"])
     return records, epoch_boundaries
 
 

@@ -9,6 +9,8 @@
    calculator. With a sufficiently small smearing width the GTO Coulomb
    energy (with the smeared self-energy subtracted) reproduces the
    point-charge Ewald result to ~1e-5.
+4. Analytic stress against a central finite difference in the applied strain;
+   test exercising the cell-gradient path in ``GTOCoulombCalculator.calculate``.
 """
 
 import math
@@ -18,6 +20,7 @@ import pytest
 import torch
 from ase import Atoms
 from ase.build import bulk
+from ase.stress import voigt_6_to_full_3x3_stress
 from graph_longrange.gto_utils import gto_basis_kspace_cutoff
 from graph_longrange.utils import FIELD_CONSTANT
 
@@ -153,3 +156,90 @@ def test_nacl_matches_matscipy_ewald():
     ewald_energy = ref_atoms.get_potential_energy()
 
     assert gto_energy == pytest.approx(ewald_energy, rel=1e-5, abs=1e-5)
+
+
+# --- stress vs finite-difference strain ------------------------------------
+
+_STRESS_Q = 0.7
+_STRESS_SIGMA = 0.6
+
+# Triclinic with off-axis atoms, so all six stress components are non-trivial.
+_STRESS_CELL = np.array(
+    [
+        [7.0, 0.0, 0.0],
+        [0.9, 6.2, 0.0],
+        [0.4, 0.7, 5.8],
+    ]
+)
+_STRESS_SCALED_POSITIONS = np.array(
+    [
+        [0.12, 0.20, 0.31],
+        [0.55, 0.61, 0.72],
+    ]
+)
+
+
+def _strained_pair(strain: np.ndarray | None = None) -> Atoms:
+    """Two opposite charges in a triclinic periodic cell, optionally strained.
+
+    Positions are scaled coordinates, matching how ``get_symmetric_displacement``
+    strains cell and positions together.
+    """
+    cell = _STRESS_CELL
+    if strain is not None:
+        cell = cell @ (np.eye(3) + strain)
+    atoms = Atoms("HH", cell=cell, pbc=True)
+    atoms.set_scaled_positions(_STRESS_SCALED_POSITIONS)
+    return atoms
+
+
+def _stress_calculator() -> GTOCoulombCalculator:
+    calc = GTOCoulombCalculator(
+        max_l=0,
+        smearing_width=_STRESS_SIGMA,
+        kspace_cutoff_factor=1.5,
+        pbc_handling="pbc",
+        include_self_interaction=False,
+    )
+    calc.set_multipoles(np.array([[_STRESS_Q], [-_STRESS_Q]]))
+    return calc
+
+
+def _energy_at_strain(strain: np.ndarray | None) -> float:
+    # Fresh calculator: avoids ASE result caching across strained configs.
+    atoms = _strained_pair(strain)
+    atoms.calc = _stress_calculator()
+    return atoms.get_potential_energy()
+
+
+def test_stress_matches_finite_difference_strain():
+    atoms = _strained_pair()
+    atoms.calc = _stress_calculator()
+    analytic = voigt_6_to_full_3x3_stress(atoms.get_stress())
+
+    volume = atoms.get_volume()
+    delta = 1e-5
+    numerical = np.zeros((3, 3))
+
+    for i in range(3):
+        for j in range(i, 3):
+            # Symmetric strain so dE = V * sigma_ij * delta in both the i==j and i!=j cases.
+            strain = np.zeros((3, 3))
+            strain[i, j] += 0.5 * delta
+            strain[j, i] += 0.5 * delta
+
+            e_plus = _energy_at_strain(strain)
+            e_minus = _energy_at_strain(-strain)
+            value = (e_plus - e_minus) / (2.0 * delta * volume)
+            numerical[i, j] = value
+            numerical[j, i] = value
+
+    assert np.max(np.abs(analytic)) > 1e-6, (
+        f"analytic stress is ~zero, test would be vacuous: {analytic}"
+    )
+
+    assert np.allclose(analytic, numerical, rtol=1e-6, atol=1e-9), (
+        "stress does not match the finite-difference strain derivative:\n"
+        f"analytic=\n{analytic}\nnumerical=\n{numerical}\n"
+        f"difference=\n{analytic - numerical}"
+    )

@@ -44,7 +44,7 @@ def _build_dataset(model, atoms_list):
 
 def _build_wrapper(model):
     optimizer = torch.optim.SGD(model.parameters(), lr=0.0)
-    return QEqModelWrapper(optimizer=optimizer, output_args=OUTPUT_ARGS)
+    return QEqModelWrapper(model=model, optimizer=optimizer, output_args=OUTPUT_ARGS)
 
 
 def _cleanup_model(model):
@@ -71,7 +71,7 @@ def _scalar_objective(output, objective):
 
 def _wrapper_parameter_gradient(wrapper, model, batch_dict, objective):
     model.zero_grad(set_to_none=True)
-    output = wrapper(model, batch_dict, training=True)
+    output = wrapper(batch_dict, training=True)
     loss = _scalar_objective(output, objective)
     _, param = _first_parameter_for_gradient(model)
     grad = torch.autograd.grad(loss, param)[0].reshape(-1)[0].detach().cpu().item()
@@ -90,7 +90,7 @@ def _finite_difference_parameter_gradient(
         plus_value = initial_value.clone()
         plus_value.reshape(-1)[0] = flat[0] + delta
         param.copy_(plus_value)
-    plus_output = wrapper(model, batch_dict, training=True)
+    plus_output = wrapper(batch_dict, training=True)
     plus_value = _scalar_objective(plus_output, objective).detach().cpu().item()
     _cleanup_model(model)
 
@@ -98,7 +98,7 @@ def _finite_difference_parameter_gradient(
         minus_value = initial_value.clone()
         minus_value.reshape(-1)[0] = flat[0] - delta
         param.copy_(minus_value)
-    minus_output = wrapper(model, batch_dict, training=True)
+    minus_output = wrapper(batch_dict, training=True)
     minus_value = _scalar_objective(minus_output, objective).detach().cpu().item()
     _cleanup_model(model)
 
@@ -125,7 +125,7 @@ def test_qeq_wrapper_output_contract():
     batch_dict = next(wrap_loader(dataset, batch_size=1, device=DEVICE))
     wrapper = _build_wrapper(model)
 
-    output = wrapper(model, batch_dict, training=True)
+    output = wrapper(batch_dict, training=True)
 
     assert "energy" in output
     assert "qeq_energy" in output
@@ -153,7 +153,7 @@ def test_qeq_wrapper_force_matches_energy_gradient():
     all_energies = []
     all_forces = []
     for batch_dict in wrap_loader(dataset, batch_size=1, device=DEVICE):
-        output = wrapper(model, batch_dict, training=True)
+        output = wrapper(batch_dict, training=True)
         all_energies += list(output["energy"].detach().cpu().numpy())
         all_forces += split_to_graphs(
             output["forces"].detach().cpu().numpy(),
