@@ -253,3 +253,7 @@ These reuse state from the previous call to the same calculator object. They
 are currently developer-facing options and are not recommended as the default
 user workflow. Validate a model without restarts before relying on restarted
 calculations.
+
+`compile_adaptive_scf=True` (requires `compile_scope='scf_chunk'` with
+`compile_enabled=True`) makes the compiled SCF stop when convergence is reached
+rather than always running a fixed number of steps.

@@ -63,6 +63,23 @@ def _constant_charge_diverged(
     )
 
 
+def scf_stop_status(avg_abs_change, total_charge, target_charge, tol, constant_charge):
+    """Stop rule shared with the compiled chunk loop; mirrors the inline rule in
+    converge_constant_fermi / converge_constant_charge.
+    Returns "converged", "diverged" or None."""
+    if constant_charge:
+        converged = _constant_charge_converged(avg_abs_change, total_charge, target_charge, tol)
+        diverged = _constant_charge_diverged(total_charge, avg_abs_change)
+    else:
+        converged = _constant_fermi_converged(avg_abs_change, tol)
+        diverged = _constant_fermi_diverged(total_charge, avg_abs_change)
+    if converged:
+        return "converged"
+    if diverged:
+        return "diverged"
+    return None
+
+
 def converge_constant_fermi(
     model,
     data,

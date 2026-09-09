@@ -157,6 +157,7 @@ class MACEFixedPointSCF(Calculator):
         compile_enabled: bool = True,
         compile_scope: str = "scf_chunk",
         compile_chunk_size: int = 1,
+        compile_adaptive_scf: bool = False,
         verbose: bool = False,
         pbc_handling: str = "mixed_periodic",
         compensating_jellium: bool = False,
@@ -242,9 +243,10 @@ class MACEFixedPointSCF(Calculator):
         )
         self.most_recent_density = None
         self.most_recent_fermi_level = None
+        self.compile_adaptive_scf = bool(compile_adaptive_scf)
 
         if self.use_compile:
-            self._validate_compiled_mode()
+            self._validate_compiled_mode(compile_scope, compile_enabled)
             self.compiled_evaluator = build_compiled_fixed_point_evaluator(
                 model=self.model,
                 pbc_handling=pbc_handling,
@@ -258,9 +260,11 @@ class MACEFixedPointSCF(Calculator):
                 enabled=compile_enabled,
                 scope=compile_scope,
                 chunk_size=compile_chunk_size,
+                adaptive=self.compile_adaptive_scf,
+                scf_tolerance=self.scf_options.scf_tolerance,
             )
 
-    def _validate_compiled_mode(self):
+    def _validate_compiled_mode(self, compile_scope, compile_enabled):
         if self.pbc_handling not in ("pbc", "slab"):
             raise ValueError(
                 "Compiled MACEFixedPointSCF supports only "
@@ -280,13 +284,19 @@ class MACEFixedPointSCF(Calculator):
                 "Compiled MACEFixedPointSCF currently requires "
                 "initial_fermi_level='from_data'."
             )
-        if self.restart_density:
+        chunk_restart_ok = compile_scope == "scf_chunk" and compile_enabled
+        if self.restart_density and not chunk_restart_ok:
             raise ValueError(
                 "Compiled MACEFixedPointSCF does not support SCF restart density."
             )
-        if self.restart_fermi_level:
+        if self.restart_fermi_level and not chunk_restart_ok:
             raise ValueError(
                 "Compiled MACEFixedPointSCF does not support SCF restart Fermi level."
+            )
+        if self.compile_adaptive_scf and not chunk_restart_ok:
+            raise ValueError(
+                "compile_adaptive_scf requires compile_scope='scf_chunk' and "
+                "compile_enabled=True."
             )
         if self.save_full_scf_history:
             raise ValueError(
@@ -336,7 +346,7 @@ class MACEFixedPointSCF(Calculator):
     def warmup_compiled_evaluator(
         self,
         atoms,
-        num_scf_steps: int = 2,
+        num_scf_steps: Optional[int] = None,
         num_calls: int = 1,
     ) -> None:
         if self.compiled_evaluator is None:
@@ -348,6 +358,8 @@ class MACEFixedPointSCF(Calculator):
             )
         if num_calls <= 0:
             return
+        if num_scf_steps is None:
+            num_scf_steps = self.compiled_evaluator.compile_chunk_size + 1
 
         intended_num_scf_steps = self.compiled_evaluator.num_scf_steps
         batch = self._build_batch(atoms)
@@ -392,7 +404,11 @@ class MACEFixedPointSCF(Calculator):
     def _run_model(self, batch, restart_state):
         batch_dict = batch.to_dict()
         if self.compiled_evaluator is not None:
-            return self.compiled_evaluator.evaluate(batch_dict)
+            return self.compiled_evaluator.evaluate(
+                batch_dict,
+                initial_charge_density=restart_state["initial_charge_density"],
+                initial_fermi_level=restart_state["fermi_level"],
+            )
 
         for p in self.model.parameters():
             p.requires_grad = False
@@ -521,6 +537,10 @@ class MACEFixedPointSCF(Calculator):
             "num_scf_steps": diagnostics["num_scf_steps"],
             "electrostatic_features": electrostatic_features,
         }
+        if output.get("scf_status") is not None:
+            results["scf_status"] = output["scf_status"]
+        if output.get("num_scf_steps_taken") is not None:
+            results["num_scf_steps_taken"] = output["num_scf_steps_taken"]
         if self.save_full_scf_history:
             results["full_scf_history"] = diagnostics["charge_history"]
         return results
