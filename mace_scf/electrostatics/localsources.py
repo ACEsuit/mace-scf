@@ -3,14 +3,10 @@ import torch
 from typing import Callable, Dict, List, Optional, Type, Tuple
 from e3nn.util.jit import compile_mode
 from e3nn import o3
-from scipy.constants import pi
 import numpy as np
 
 from mace.tools.scatter import scatter_sum
-from mace.modules.utils import (
-    get_edge_vectors_and_lengths,
-    get_symmetric_displacement,
-)
+from mace.modules.utils import get_edge_vectors_and_lengths
 from e3nn.io import CartesianTensor
 
 from graph_longrange.energy import GTOElectrostaticEnergy
@@ -38,7 +34,12 @@ from .field_blocks import (
     LinearPolarizabilityReadoutBlock
 )
 
-from .utils import compute_total_charge_dipole, compute_polarization, get_outputs
+from .utils import (
+    compute_total_charge_dipole,
+    compute_polarization,
+    get_outputs,
+    prepare_strain,
+)
 
 
 class _LocalSourceModelBase(torch.nn.Module):
@@ -376,30 +377,23 @@ class LocalSplitCharges(_LocalSourceModelBase):
         data["node_attrs"].requires_grad_(True)
         data["positions"].requires_grad_(True)
         num_graphs = data["ptr"].numel() - 1
-        displacement = torch.zeros(
-            (num_graphs, 3, 3),
-            dtype=data["positions"].dtype,
-            device=data["positions"].device,
+        (
+            data["positions"],
+            data["shifts"],
+            displacement,
+            cell,
+            rcell,
+            volume,
+        ) = prepare_strain(
+            positions=data["positions"],
+            shifts=data["shifts"],
+            unit_shifts=data["unit_shifts"],
+            cell=data["cell"],
+            edge_index=data["edge_index"],
+            batch=data["batch"],
+            num_graphs=num_graphs,
+            compute_displacement=compute_virials or compute_stress or compute_displacement,
         )
-        cell = data["cell"].clone().view(-1,3,3)
-
-        if compute_virials or compute_stress or compute_displacement:
-            (
-                data["positions"],
-                data["shifts"],
-                displacement,
-            ) = get_symmetric_displacement(
-                positions=data["positions"],
-                unit_shifts=data["unit_shifts"],
-                cell=cell.clone(),
-                edge_index=data["edge_index"],
-                num_graphs=num_graphs,
-                batch=data["batch"],
-            )
-            cell.requires_grad_(True)
-        
-        rcell = 2*pi*torch.linalg.inv_ex(cell.mT)[0]
-        volume = torch.linalg.det(cell.view(-1, 3, 3)).abs()
 
         # Atomic energies
         node_e0_heads = self.atomic_energies_fn(data["node_attrs"])
@@ -669,30 +663,23 @@ class LocalCharges(_LocalSourceModelBase):
         data["node_attrs"].requires_grad_(True)
         data["positions"].requires_grad_(True)
         num_graphs = data["ptr"].numel() - 1
-        displacement = torch.zeros(
-            (num_graphs, 3, 3),
-            dtype=data["positions"].dtype,
-            device=data["positions"].device,
+        (
+            data["positions"],
+            data["shifts"],
+            displacement,
+            cell,
+            rcell,
+            volume,
+        ) = prepare_strain(
+            positions=data["positions"],
+            shifts=data["shifts"],
+            unit_shifts=data["unit_shifts"],
+            cell=data["cell"],
+            edge_index=data["edge_index"],
+            batch=data["batch"],
+            num_graphs=num_graphs,
+            compute_displacement=compute_virials or compute_stress or compute_displacement,
         )
-        cell = data["cell"].clone().view(-1,3,3)
-
-        if compute_virials or compute_stress or compute_displacement:
-            (
-                data["positions"],
-                data["shifts"],
-                displacement,
-            ) = get_symmetric_displacement(
-                positions=data["positions"],
-                unit_shifts=data["unit_shifts"],
-                cell=cell.clone(),
-                edge_index=data["edge_index"],
-                num_graphs=num_graphs,
-                batch=data["batch"],
-            )
-            cell.requires_grad_(True)
-        
-        rcell = 2*pi*torch.linalg.inv_ex(cell.mT)[0]
-        volume = torch.linalg.det(cell.view(-1, 3, 3)).abs()
 
         # Atomic energies
         node_e0_heads = self.atomic_energies_fn(data["node_attrs"])
@@ -906,29 +893,23 @@ class FixedChargeBaselinedMACE(_LocalSourceModelBase):
         data["node_attrs"].requires_grad_(True)
         data["positions"].requires_grad_(True)
         num_graphs = data["ptr"].numel() - 1
-        displacement = torch.zeros(
-            (num_graphs, 3, 3),
-            dtype=data["positions"].dtype,
-            device=data["positions"].device,
+        (
+            data["positions"],
+            data["shifts"],
+            displacement,
+            cell,
+            rcell,
+            volume,
+        ) = prepare_strain(
+            positions=data["positions"],
+            shifts=data["shifts"],
+            unit_shifts=data["unit_shifts"],
+            cell=data["cell"],
+            edge_index=data["edge_index"],
+            batch=data["batch"],
+            num_graphs=num_graphs,
+            compute_displacement=compute_virials or compute_stress or compute_displacement,
         )
-        cell = data["cell"].clone().view(-1, 3, 3)
-        if compute_virials or compute_stress or compute_displacement:
-            (
-                data["positions"],
-                data["shifts"],
-                displacement,
-            ) = get_symmetric_displacement(
-                positions=data["positions"],
-                unit_shifts=data["unit_shifts"],
-                cell=cell.clone(),
-                edge_index=data["edge_index"],
-                num_graphs=num_graphs,
-                batch=data["batch"],
-            )
-            cell.requires_grad_(True)
-
-        rcell = 2 * pi * torch.linalg.inv_ex(cell.mT)[0]
-        volume = torch.linalg.det(cell.view(-1, 3, 3)).abs()
 
         node_e0_heads = self.atomic_energies_fn(data["node_attrs"])
         node_e0 = torch.gather(node_e0_heads, dim=1, index=node_heads.view(-1, 1)).squeeze(-1)
