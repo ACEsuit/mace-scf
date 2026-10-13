@@ -154,3 +154,28 @@ def make_polarizable_model_random(seed, atoms_obj, cutoff=3.0, irreps="4x0e+4x1o
         the_weight.copy_(zzs + the_weight)
         the_weight.requires_grad_(True)
     return the_model
+
+CUBIC_CELL = np.diag([7.0, 7.0, 7.0])
+TRICLINIC_CELL = np.array(
+    [
+        [7.0, 0.0, 0.0],
+        [1.3, 6.8, 0.0],
+        [0.9, -1.1, 6.9],
+    ]
+)
+
+
+def periodic_water_dimer(cell, formal_charges_key="formal_oxidation_states"):
+    positions = np.array(
+        [
+            [3.10, 3.05, 3.12],
+            [3.65, 3.80, 2.95],
+            [2.31, 3.36, 3.55],
+            [4.85, 5.10, 4.60],
+            [5.25, 4.35, 5.05],
+            [4.25, 5.55, 5.22],
+        ]
+    )
+    atoms = Atoms(symbols="OHHOHH", positions=positions, cell=cell, pbc=True)
+    atoms.arrays[formal_charges_key] = np.array([-2.0, 1.0, 1.0, -2.0, 1.0, 1.0])
+    return atoms
