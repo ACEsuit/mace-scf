@@ -50,7 +50,7 @@ $$
 Implicit differentiation avoids backpropagating through the SCF iterations.
 Instead, it differentiates the equation that defines the converged state.
 
-### Constant Fermi Level
+## Constant Fermi Level
 
 Suppose that for a given training example, the model has been iterated to self consistency. This gives a set of multipoles $\mathbf p^\ast$.
 In constant-Fermi mode, $\mu$ is fixed. The only implicit variable is
