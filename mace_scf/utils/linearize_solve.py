@@ -90,10 +90,16 @@ def linearize_and_solve_density(
         return torch.cat([density_residual, charge_residual])
 
     residual = residual_from_flat(flat_star)
-    jacobian = _jacobian_from_vmapped_vjps(residual, flat_star)
+    jacobian = _jacobian_from_vmapped_vjps(residual, flat_star)#.detach()
 
     delta = torch.linalg.solve(jacobian, residual.unsqueeze(-1)).squeeze(-1)
-    solved_state = flat_star - delta
+    state_1 = flat_star - delta
+    # second newton-raphson step needed to get d2R/dxd(theta) accurately.
+    # this is only needed if d^2R/dp^2 is nonzero, which is not the case
+    # when fixedpoint_update_config['nonlinearity_cls'] == 'NoNonLinearity'
+    delta = torch.linalg.solve(jacobian, residual_from_flat(state_1).unsqueeze(-1)).squeeze(-1)
+    solved_state = state_1 - delta
+
     density, fermi_level = extract_state(solved_state)
 
     fermi_features = model.features_from_fermi_level(
