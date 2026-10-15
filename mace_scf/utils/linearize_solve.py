@@ -90,7 +90,7 @@ def linearize_and_solve_density(
         return torch.cat([density_residual, charge_residual])
 
     residual = residual_from_flat(flat_star)
-    jacobian = _jacobian_from_vmapped_vjps(residual, flat_star)#.detach()
+    jacobian = _jacobian_from_vmapped_vjps(residual, flat_star).detach()
 
     delta = torch.linalg.solve(jacobian, residual.unsqueeze(-1)).squeeze(-1)
     state_1 = flat_star - delta
