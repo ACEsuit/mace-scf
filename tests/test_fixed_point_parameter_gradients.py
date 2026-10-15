@@ -3,11 +3,12 @@ i.e. checking second order gradients
 
 To print the size of linearize_solve error add -s to pytest call.
 
-TODO: Merge with tests/test_fixed_point_wrapper_training_modes.py.
-I did not do this because it loads .model files from fixtures/models
-and I am not sure how to obtain these models.
+Kept separate from test_fixed_point_wrapper_training_modes.py: uses
+a random in-code model so it runs without the git-ignored .model fixtures.
 """
 
+import os
+import resource
 import time
 
 import numpy as np
@@ -243,3 +244,57 @@ def test_linearize_solve_gradient_matches_unroll_scf(
         f"linearize_solve vs unroll_scf relative gradient error "
         f"{results['relative_error']:.3e}, cosine {results['cosine']:.8f}"
     )
+
+
+LARGE_SYSTEM_REPEATS = (3, 3, 4)  # 36 water dimers, 216 atoms
+INCLUDE_LARGE_SYSTEM_BENCHMARK = os.environ.get("MACE_TEST_LARGE_SYSTEM", "0") == "1"
+
+
+@pytest.mark.skipif(
+    not INCLUDE_LARGE_SYSTEM_BENCHMARK,
+    reason="set MACE_TEST_LARGE_SYSTEM=1 to run the 216-atom cost benchmark",
+)
+def test_linearize_solve_cost_large_system():
+    """Time and peak memory of one force-loss gradient on 216 atoms.
+
+    Small systems cannot show the cost of the Jacobian build. Add -rA to see the
+    printed numbers. On a CPU, peak memory is the growth of the process peak RSS,
+    which cannot be reset, so it is only valid for linearize_solve, which runs first.
+    """
+    torch.set_default_dtype(torch.float64)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = make_fixed_point_model_random(
+        seed=0, nonlinearity_cls=MODELS["nonlinear"], update_scale=UPDATE_SCALE
+    ).to(device)
+    atoms = periodic_water_dimer(CUBIC_CELL).repeat(LARGE_SYSTEM_REPEATS)
+    dataset = dataset_from_atoms([atoms], cutoff=3.0, atomic_multipoles_max_l=1)
+    batch = next(wrap_loader(dataset, device=device, batch_size=1))
+    force_weights = torch.randn(
+        batch["positions"].shape, generator=torch.Generator().manual_seed(1)
+    ).to(device)
+
+    gradients = {}
+    for mode in ("linearize_solve", "unroll_scf"):
+        wrapper = _build_wrapper(model, mode, constant_charge=True)
+        peak_rss_before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        _parameter_gradient(wrapper, model, batch, "force", force_weights)  # warm-up
+        if device == "cuda":
+            torch.cuda.synchronize()
+            torch.cuda.reset_peak_memory_stats()
+        start = time.perf_counter()
+        gradients[mode] = _parameter_gradient(wrapper, model, batch, "force", force_weights)
+        if device == "cuda":
+            torch.cuda.synchronize()
+        elapsed = time.perf_counter() - start
+        if device == "cuda":
+            peak = torch.cuda.max_memory_allocated() / 2**30
+        else:  # ru_maxrss is in KiB on Linux
+            peak = (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - peak_rss_before) / 2**20
+        print(f"\n{mode} {len(atoms)} atoms on {device}: time={elapsed:.2f}s peak_memory={peak:.2f}GiB")
+
+    relative_error = (
+        (gradients["linearize_solve"] - gradients["unroll_scf"]).norm()
+        / gradients["unroll_scf"].norm()
+    ).item()
+    print(f"relative_error={relative_error:.3e}")
+    assert relative_error < GRADIENT_RTOL
