@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from e3nn import o3, get_optimization_defaults, set_optimization_defaults
 
 import mace_scf.electrostatics
+from mace_scf.electrostatics import field_blocks
 import mace_scf.data
 import mace.tools
 import mace.modules
@@ -179,3 +180,51 @@ def periodic_water_dimer(cell, formal_charges_key="formal_oxidation_states"):
     atoms = Atoms(symbols="OHHOHH", positions=positions, cell=cell, pbc=True)
     atoms.arrays[formal_charges_key] = np.array([-2.0, 1.0, 1.0, -2.0, 1.0, 1.0])
     return atoms
+
+
+def make_fixed_point_model_random(seed, nonlinearity_cls="NoNonLinearity", update_scale=1.0):
+    """Small FixedPointCore with random weights for H/O systems.
+    """
+    seed_torch(seed)
+    z_table = mace.tools.get_atomic_number_table_from_zs([1, 8])
+    interaction_cls = mace.modules.interaction_classes[
+        "RealAgnosticResidualInteractionBlock"
+    ]
+    with disable_e3nn_codegen():
+        model = mace_scf.electrostatics.FixedPointCore(
+            r_max=3.0,
+            num_bessel=8,
+            num_polynomial_cutoff=6,
+            max_ell=2,
+            interaction_cls=interaction_cls,
+            interaction_cls_first=interaction_cls,
+            num_interactions=2,
+            num_elements=len(z_table),
+            hidden_irreps=o3.Irreps("8x0e+8x1o"),
+            MLP_irreps=o3.Irreps("16x0e"),
+            atomic_energies=np.array([1.0] * len(z_table)),
+            avg_num_neighbors=10.0,
+            atomic_numbers=z_table.zs,
+            correlation=2,
+            gate=mace.modules.gate_dict["silu"],
+            atom_density_scaling=np.array([1.0] * len(z_table)),
+            atomic_multipoles_max_l=1,
+            atomic_multipoles_smearing_width=1.5,
+            field_feature_max_l=1,
+            field_feature_widths=[1.5],
+            include_electrostatic_self_interaction=True,
+            add_local_electron_energy=True,
+            pbc_handling="pbc",
+            fixedpoint_update_config={
+                "type": field_blocks.OneBodyVariableUpdate,
+                "potential_embedding_cls": field_blocks.BiasedLinearPotentialEmbedding,
+                "nonlinearity_cls": getattr(field_blocks, nonlinearity_cls),
+            },
+            field_readout_config={
+                "type": field_blocks.StrictQuadraticFieldEnergyReadout
+            },
+        )
+    with torch.no_grad():
+        for param in model.field_dependent_charges_map.element_select_out.parameters():
+            param.mul_(update_scale)
+    return model
