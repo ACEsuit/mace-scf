@@ -94,9 +94,19 @@ def linearize_and_solve_density(
 
     delta = torch.linalg.solve(jacobian, residual.unsqueeze(-1)).squeeze(-1)
     state_1 = flat_star - delta
-    # second newton-raphson step needed to get d2R/dxd(theta) accurately.
-    # this is only needed if d^2R/dp^2 is nonzero, which is not the case
-    # when fixedpoint_update_config['nonlinearity_cls'] == 'NoNonLinearity'
+
+    # Second chord step (frozen Jacobian) makes the solution accurate to
+    # second order, so mixed derivatives d2x/dr dtheta (force parameter
+    # gradients) are exact. Checkable with
+    # tests/test_fixed_point_parameter_gradients.py:
+    # 1) one step, detached J: wrong (only first derivatives exact).
+    # 2) one step, attached J: right only if d2R/dx2 == 0, e.g.
+    #    nonlinearity_cls == 'NoNonLinearity'.
+    # 3) two steps, attached or detached J: right. Detached (used here)
+    #    avoids differentiating through the Jacobian construction,
+    #    which halves required memory.
+    # Third-order losses (e.g. Hessians) would require more testing.
+
     delta = torch.linalg.solve(jacobian, residual_from_flat(state_1).unsqueeze(-1)).squeeze(-1)
     solved_state = state_1 - delta
 
