@@ -135,6 +135,12 @@ class FixedPointWrapper(BaseModelWrapper):
             self._runner = FixedPointSCFRunner(self.scf_options)
         if self.mode in ("implicit", "linearize_solve"):
             self._linear_solve = training_options.linear_solve
+        if self.mode == "implicit" and (output_args["virials"] or output_args["stress"]):
+            # torchopt would need the strain, cell and shifts as meta-inputs.
+            raise NotImplementedError(
+                "implicit mode does not support virials or stress; "
+                "use linearize_solve or unroll_scf"
+            )
 
     def forward(
         self,
@@ -157,15 +163,19 @@ class FixedPointWrapper(BaseModelWrapper):
             elif self.mode == "linearize_solve":
                 return self._forward_linearize_solve(batch_dict, training)
 
+    def _local_part(self, batch_dict):
+        return self.model.local_part(
+            batch_dict,
+            compute_force=self.output_args["forces"],
+            compute_displacement=self.output_args["virials"] or self.output_args["stress"],
+        )
+
     def _forward_direct(self, batch_dict, training):
         if training:
             for p in self.model.parameters():
                 p.requires_grad = True
 
-        local_state = self.model.local_part(
-            batch_dict,
-            compute_force=self.output_args["forces"],
-        )
+        local_state = self._local_part(batch_dict)
 
         fermi_level_features = self.model.features_from_fermi_level(
             batch_dict["batch"], local_state.positions, batch_dict["fermi_level"]
@@ -258,9 +268,7 @@ class FixedPointWrapper(BaseModelWrapper):
         for p in self.model.parameters():
             p.requires_grad = True
 
-        local_state = self.model.local_part(
-            batch_dict, compute_force=self.output_args["forces"]
-        )
+        local_state = self._local_part(batch_dict)
 
         initial_density = self._runner.get_initial_density(local_state, batch_dict)
         initial_fermi = self._runner.get_initial_fermi(self.model, local_state, batch_dict)
@@ -333,10 +341,7 @@ class FixedPointWrapper(BaseModelWrapper):
         for p in self.model.parameters():
             p.requires_grad = True
 
-        local_state = self.model.local_part(
-            batch_dict,
-            compute_force=self.output_args["forces"],
-        )
+        local_state = self._local_part(batch_dict)
 
         initial_density = self._runner.get_initial_density(local_state, batch_dict)
         initial_fermi = self._runner.get_initial_fermi(self.model, local_state, batch_dict)

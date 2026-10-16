@@ -96,8 +96,8 @@ def linearize_and_solve_density(
     state_1 = flat_star - delta
 
     # Second chord step (frozen Jacobian) makes the solution accurate to
-    # second order, so mixed derivatives d2x/dr dtheta (force parameter
-    # gradients) are exact. Checkable with
+    # second order, so mixed derivatives d2x/dr dtheta (force and stress
+    # parameter gradients) are exact. Checkable with
     # tests/test_fixed_point_parameter_gradients.py:
     # 1) one step, detached J: wrong (only first derivatives exact).
     # 2) one step, attached J: right only if d2R/dx2 == 0, e.g.
