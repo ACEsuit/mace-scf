@@ -6,6 +6,11 @@ from contextlib import contextmanager
 from e3nn import o3, get_optimization_defaults, set_optimization_defaults
 
 import mace_scf.electrostatics
+from mace_scf.electrostatics.fixed_point_state import (
+    FixedPointSCFOptions,
+    FixedPointTrainingOptions,
+)
+from mace_scf.utils.model_training_wrappers import FixedPointWrapper
 from mace_scf.electrostatics import field_blocks
 import mace_scf.data
 import mace.tools
@@ -228,3 +233,40 @@ def make_fixed_point_model_random(seed, nonlinearity_cls="NoNonLinearity", updat
         for param in model.field_dependent_charges_map.element_select_out.parameters():
             param.mul_(update_scale)
     return model
+
+
+def copy_batch(batch):
+    """Copy a batch dict, so a forward pass cannot change the original in place."""
+    return {k: v.clone() if torch.is_tensor(v) else v for k, v in batch.items()}
+
+
+def make_fixed_point_wrapper(model, mode, constant_charge, stress=False):
+    """FixedPointWrapper with tight SCF settings for gradient and stress checks.
+
+    linearize_solve raises instead of falling back to unroll_scf, because a
+    silent fallback would make a comparison with unroll_scf vacuous.
+    """
+    scf_options = None
+    if mode != "direct":
+        scf_options = FixedPointSCFOptions(
+            num_scf_steps=400,
+            scf_tolerance=1e-12,
+            constant_charge=constant_charge,
+            mixing_parameter=0.5,
+            initial_density="local_guess",
+            initial_fermi_level="from_data",
+            use_autograd_forces=True,
+        )
+    wrapper = FixedPointWrapper(
+        model=model,
+        optimizer=torch.optim.SGD(model.parameters(), lr=0.0),
+        output_args={"forces": True, "virials": stress, "stress": stress},
+        training_options=FixedPointTrainingOptions(mode=mode, scf=scf_options),
+    )
+    if mode == "linearize_solve":
+        def _no_fallback(*args, **kwargs):
+            raise AssertionError("linearize_solve fell back to unroll_scf")
+
+        wrapper._forward_unroll_scf = _no_fallback
+        wrapper._linearize_fallback_unroll = _no_fallback
+    return wrapper

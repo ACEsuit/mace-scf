@@ -1,4 +1,4 @@
-"""Parameter gradients of energy and force losses: linearize_solve vs unroll_scf.
+"""Parameter gradients of energy, force and stress losses: linearize_solve vs unroll_scf.
 i.e. checking second order gradients
 
 To print the size of linearize_solve error add -s to pytest call.
@@ -15,23 +15,18 @@ import numpy as np
 import pytest
 import torch
 
-from mace_scf.electrostatics.fixed_point_state import (
-    FixedPointSCFOptions,
-    FixedPointTrainingOptions,
-)
-from mace_scf.utils.model_training_wrappers import FixedPointWrapper
 from tests.utils import (
     CUBIC_CELL,
     TRICLINIC_CELL,
+    copy_batch,
     dataset_from_atoms,
     make_fixed_point_model_random,
+    make_fixed_point_wrapper,
     periodic_water_dimer,
     wrap_loader,
 )
 
 UPDATE_SCALE = 0.2  # largest tried scale at which both models converge in both charge modes
-SCF_TOLERANCE = 1e-12
-NUM_SCF_STEPS = 400
 FINITE_DIFFERENCE_STEP = 1e-5
 NUM_DIRECTIONS = 2
 GRADIENT_RTOL = 1e-6  # linearize_solve vs unroll_scf, relative L2; linear model observed <1e-8
@@ -42,32 +37,8 @@ MODELS = {
     "linear": "NoNonLinearity",
     "nonlinear": "MLPNonLinearity",
 }
-
-
-def _build_wrapper(model, mode, constant_charge):
-    scf_options = FixedPointSCFOptions(
-        num_scf_steps=NUM_SCF_STEPS,
-        scf_tolerance=SCF_TOLERANCE,
-        constant_charge=constant_charge,
-        mixing_parameter=0.5,
-        initial_density="local_guess",
-        initial_fermi_level="from_data",
-        use_autograd_forces=True,
-    )
-    wrapper = FixedPointWrapper(
-        model=model,
-        optimizer=torch.optim.SGD(model.parameters(), lr=0.0),
-        output_args={"forces": True, "virials": False, "stress": False},
-        training_options=FixedPointTrainingOptions(mode=mode, scf=scf_options),
-    )
-    if mode == "linearize_solve":
-        # A silent fallback to unroll_scf would make the comparison vacuous.
-        def _no_fallback(*args, **kwargs):
-            raise AssertionError("linearize_solve fell back to unroll_scf")
-
-        wrapper._forward_unroll_scf = _no_fallback
-        wrapper._linearize_fallback_unroll = _no_fallback
-    return wrapper
+OUTPUT_KEYS = {"energy": "energy", "force": "forces", "stress": "stress"}
+OBJECTIVES = tuple(OUTPUT_KEYS)
 
 
 def _build_batch(batch_size):
@@ -78,21 +49,25 @@ def _build_batch(batch_size):
     return next(wrap_loader(dataset, batch_size=batch_size))
 
 
-def _copy_batch(batch):
-    return {k: v.clone() if torch.is_tensor(v) else v for k, v in batch.items()}
+def _loss(output, objective, weights):
+    value = output[OUTPUT_KEYS[objective]]
+    return value.sum() if weights is None else (value * weights).sum()
 
 
-def _loss(output, objective, force_weights):
+def _objective_weights(objective, batch, seed):
+    """Fixed random weights that turn forces or stress into a scalar loss."""
     if objective == "energy":
-        return output["energy"].sum()
-    return (output["forces"] * force_weights).sum()
+        return None
+    num_graphs = batch["ptr"].numel() - 1
+    shape = batch["positions"].shape if objective == "force" else (num_graphs, 3, 3)
+    return torch.randn(shape, generator=torch.Generator().manual_seed(seed))
 
 
-def _parameter_gradient(wrapper, model, batch, objective, force_weights):
-    output = wrapper(_copy_batch(batch), training=True)
+def _parameter_gradient(wrapper, model, batch, objective, weights):
+    output = wrapper(copy_batch(batch), training=True)
     params = list(model.parameters())
     grads = torch.autograd.grad(
-        _loss(output, objective, force_weights), params, allow_unused=True
+        _loss(output, objective, weights), params, allow_unused=True
     )
     return torch.cat(
         [
@@ -111,19 +86,19 @@ def _shift_parameters(model, direction, step):
             offset += n
 
 
-def _directional_finite_difference(wrapper, model, batch, objective, force_weights, direction):
+def _directional_finite_difference(wrapper, model, batch, objective, weights, direction):
     h = FINITE_DIFFERENCE_STEP
     values = []
     for step in (h, -2 * h):
         _shift_parameters(model, direction, step)
-        output = wrapper(_copy_batch(batch), training=True)
-        values.append(_loss(output, objective, force_weights).item())
+        output = wrapper(copy_batch(batch), training=False)
+        values.append(_loss(output, objective, weights).item())
     _shift_parameters(model, direction, h)
     return (values[0] - values[1]) / (2 * h)
 
 
 def _scf_status(wrapper, model, batch):
-    batch = _copy_batch(batch)
+    batch = copy_batch(batch)
     runner = wrapper._runner
     local_state = model.local_part(batch)
     result = runner.converge(
@@ -140,7 +115,7 @@ _RESULTS = {}
 
 
 def _results(model_kind, constant_charge, batch_size):
-    """Gradients and finite differences for both objectives, computed once per case."""
+    """Gradients and finite differences for all objectives, computed once per case."""
     key = (model_kind, constant_charge, batch_size)
     if key in _RESULTS:
         return _RESULTS[key]
@@ -150,20 +125,20 @@ def _results(model_kind, constant_charge, batch_size):
         seed=0, nonlinearity_cls=MODELS[model_kind], update_scale=UPDATE_SCALE
     )
     batch = _build_batch(batch_size)
-    linearize = _build_wrapper(model, "linearize_solve", constant_charge)
-    unroll = _build_wrapper(model, "unroll_scf", constant_charge)
+    linearize = make_fixed_point_wrapper(model, "linearize_solve", constant_charge, stress=True)
+    unroll = make_fixed_point_wrapper(model, "unroll_scf", constant_charge, stress=True)
     status = _scf_status(unroll, model, batch)
     assert status == "converged", f"SCF did not converge for {key}: {status}"
 
     generator = torch.Generator().manual_seed(1)
-    force_weights = torch.randn(batch["positions"].shape, generator=generator)
     results = {}
-    for objective in ("energy", "force"):
+    for seed, objective in enumerate(OBJECTIVES, start=2):
+        weights = _objective_weights(objective, batch, seed)
         start = time.perf_counter()
-        grad_linearize = _parameter_gradient(linearize, model, batch, objective, force_weights)
+        grad_linearize = _parameter_gradient(linearize, model, batch, objective, weights)
         time_linearize = time.perf_counter() - start
         start = time.perf_counter()
-        grad_unroll = _parameter_gradient(unroll, model, batch, objective, force_weights)
+        grad_unroll = _parameter_gradient(unroll, model, batch, objective, weights)
         time_unroll = time.perf_counter() - start
         directions = []
         for _ in range(NUM_DIRECTIONS):
@@ -174,7 +149,7 @@ def _results(model_kind, constant_charge, batch_size):
                     torch.dot(grad_linearize, direction).item(),
                     torch.dot(grad_unroll, direction).item(),
                     _directional_finite_difference(
-                        unroll, model, batch, objective, force_weights, direction
+                        unroll, model, batch, objective, weights, direction
                     ),
                 )
             )
@@ -204,7 +179,7 @@ CASES = [
         id=f"{model_kind}-{objective}-cc_{constant_charge}-bs_{batch_size}",
     )
     for model_kind in MODELS
-    for objective in ("energy", "force")
+    for objective in OBJECTIVES
     for constant_charge in (False, True)
     for batch_size in (1, 2)
 ]
@@ -275,7 +250,7 @@ def test_linearize_solve_cost_large_system():
 
     gradients = {}
     for mode in ("linearize_solve", "unroll_scf"):
-        wrapper = _build_wrapper(model, mode, constant_charge=True)
+        wrapper = make_fixed_point_wrapper(model, mode, constant_charge=True)
         peak_rss_before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         _parameter_gradient(wrapper, model, batch, "force", force_weights)  # warm-up
         if device == "cuda":
