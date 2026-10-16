@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 
 from mace_scf.utils.load_data import (
-    check_explicit_dipole_component_weights,
-    check_explicit_dipole_component_weights_for_paths,
+    check_explicit_component_weights,
+    check_explicit_component_weights_for_paths,
 )
 
 
@@ -30,38 +30,38 @@ def test_explicit_dipole_weight_required_when_dipole_is_present(tmp_path):
     xyz_path = _write_atoms(tmp_path / "missing_weight.xyz")
 
     with pytest.raises(ValueError, match="without explicit config_dipole_weight"):
-        check_explicit_dipole_component_weights(xyz_path, _keyspec(), "train")
+        check_explicit_component_weights(xyz_path, _keyspec(), "train")
 
 
 def test_explicit_dipole_weight_accepts_three_component_mask(tmp_path):
     xyz_path = _write_atoms(tmp_path / "weighted.xyz", dipole_weight=[1.0, 1.0, 1.0])
 
-    check_explicit_dipole_component_weights(xyz_path, _keyspec(), "train")
+    check_explicit_component_weights(xyz_path, _keyspec(), "train")
 
 
 def test_explicit_dipole_weight_accepts_non_binary_three_component_values(tmp_path):
     xyz_path = _write_atoms(tmp_path / "fractional_weight.xyz", dipole_weight=[0.5, 0.0, 2.0])
 
-    check_explicit_dipole_component_weights(xyz_path, _keyspec(), "train")
+    check_explicit_component_weights(xyz_path, _keyspec(), "train")
 
 
 def test_explicit_dipole_weight_rejects_scalar_weight(tmp_path):
     xyz_path = _write_atoms(tmp_path / "scalar_weight.xyz", dipole_weight=1.0)
 
     with pytest.raises(ValueError, match="must be a 3-vector"):
-        check_explicit_dipole_component_weights(xyz_path, _keyspec(), "train")
+        check_explicit_component_weights(xyz_path, _keyspec(), "train")
 
 
 def test_explicit_dipole_weight_check_ignores_missing_dipoles(tmp_path):
     xyz_path = _write_atoms(tmp_path / "no_dipole.xyz", include_dipole=False)
 
-    check_explicit_dipole_component_weights(xyz_path, _keyspec(), "train")
+    check_explicit_component_weights(xyz_path, _keyspec(), "train")
 
 
 def test_explicit_dipole_weight_check_ignores_disabled_dipole_key(tmp_path):
     xyz_path = _write_atoms(tmp_path / "disabled_dipole.xyz")
 
-    check_explicit_dipole_component_weights(xyz_path, _keyspec("none"), "train")
+    check_explicit_component_weights(xyz_path, _keyspec("none"), "train")
 
 
 def test_explicit_dipole_weight_check_covers_train_valid_and_test_paths(tmp_path):
@@ -80,4 +80,4 @@ def test_explicit_dipole_weight_check_covers_train_valid_and_test_paths(tmp_path
     )
 
     with pytest.raises(ValueError, match="split=test"):
-        check_explicit_dipole_component_weights_for_paths(args)
+        check_explicit_component_weights_for_paths(args)

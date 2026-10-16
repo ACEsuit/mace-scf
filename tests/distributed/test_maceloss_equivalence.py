@@ -36,6 +36,8 @@ def _build_structure(struct_id: int, seed: int):
         energy=r(1),
         forces=r(n, 3),
         stress=r(1, 3, 3),
+        stress_weight=torch.ones(1),
+        stress_component_weight=torch.ones(1, 3, 3),
         virials=r(1, 3, 3),
         total_charge=r(1),
         fermi_level=r(1),
