@@ -136,6 +136,31 @@ do not have the dipole info key at all are automatically given a zero
 dipole weight by the data loader and so do not contribute to dipole losses
 or metrics.
 
+## Config Stress Weight
+
+Stress uses the same scheme. If a config contains the stress key specified in
+`heads.info_keys.stress`, it must also contain an explicit
+`config_stress_weight`.
+
+`config_stress_weight` is a 3-vector of per-axis weights `w` in Cartesian
+order. Stress component `(a, b)` is weighted by `w_a * w_b` in the stress loss
+and in the stress error metrics:
+
+- for bulk configurations, `config_stress_weight="1.0 1.0 1.0"`
+- for slabs with the surface normal along z, `config_stress_weight="1.0 1.0 0.0"`,
+  which keeps xx, yy and xy and drops zz, xz and yz
+- to ignore the stress on a config, `config_stress_weight="0.0 0.0 0.0"`
+
+Notes:
+
+- Fractional weights multiply, so `w = [0.5, 0.5, 0.5]` puts a weight of
+  0.25 on every component.
+- The stress loss averages over all 9 components, including the masked ones. A
+  slab with `"1.0 1.0 0.0"` therefore contributes 4/9 as much as a bulk config
+  with the same per-component errors.
+- Configs without the stress key are given a zero stress weight by the data
+  loader, as for dipoles.
+
 ## train_schedule
 
 `train_schedule` defines one or more training stages. Each stage can set:
