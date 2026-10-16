@@ -107,12 +107,20 @@ class MaceSCFLoss(Metric):
             self.delta_fs.append(batch.forces - output["forces"])
             self.fs.append(batch.forces)
         if output.get("stress") is not None and batch.stress is not None:
-            self.stress_computed += 1
-            self.delta_stress.append(batch.stress - output["stress"])
-            self.delta_stress_per_atom.append(
-                (batch.stress - output["stress"])
-                / (batch.ptr[1:] - batch.ptr[:-1]).view(-1, 1, 1)
-            )
+            stress_components_to_include = (
+                batch.stress_weight.view(-1, 1, 1)
+                * batch.stress_component_weight.view(-1, 3, 3)
+            ) > 0.0
+            if torch.any(stress_components_to_include):
+                self.stress_computed += 1
+                stress_differences = (batch.stress - output["stress"]).view(-1, 3, 3)
+                num_atoms = (batch.ptr[1:] - batch.ptr[:-1]).view(-1, 1, 1)
+                self.delta_stress.append(
+                    stress_differences[stress_components_to_include]
+                )
+                self.delta_stress_per_atom.append(
+                    (stress_differences / num_atoms)[stress_components_to_include]
+                )
         if output.get("virials") is not None and batch.virials is not None:
             self.virials_computed += 1
             self.delta_virials.append(batch.virials - output["virials"])

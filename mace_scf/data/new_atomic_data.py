@@ -60,6 +60,7 @@ class ExtAtomicData(AtomicData):
     external_field: torch.Tensor
     fermi_level: torch.Tensor
     fermi_level_weight: torch.Tensor
+    stress_component_weight: torch.Tensor
     enegs: torch.Tensor
     hardness: torch.Tensor
 
@@ -83,13 +84,23 @@ class ExtAtomicData(AtomicData):
         external_field = kwargs.pop("external_field", None)  # [3]
         fermi_level = kwargs.pop("fermi_level", None)  # [1]
         fermi_level_weight = kwargs.pop("fermi_level_weight", None)  # [,]
+        stress_component_weight = kwargs.pop("stress_component_weight", None)  # [1,3,3]
         # polarizability = kwargs.pop("polarizability", None) # [3,3]
         # polarizability_weight = kwargs.pop("polarizability_weight", None) #[1]
         cluster_batch = kwargs.pop("cluster_batch", None)
         cluster_loss_weight = kwargs.pop("cluster_loss_weight", None)
         enegs = kwargs.pop("enegs", None)
         hardness = kwargs.pop("hardness", None)
-        super().__init__(**kwargs)
+        # config_stress_weight is a per-axis 3-vector w; stress component (a, b)
+        # is weighted by w_a * w_b. Upstream AtomicData only accepts a scalar
+        # stress weight, so hand it 1.0 and carry the mask separately.
+        stress_weight = kwargs.pop("stress_weight", None)
+        if stress_weight is not None and stress_weight.dim() == 1:
+            stress_component_weight = torch.outer(stress_weight, stress_weight).unsqueeze(0)
+            stress_weight = stress_weight.new_tensor(1.0)
+        elif stress_component_weight is None:
+            stress_component_weight = torch.ones((1, 3, 3), dtype=torch.get_default_dtype())
+        super().__init__(stress_weight=stress_weight, **kwargs)
         assert (
             density_coefficients_weight is None
             or len(density_coefficients_weight.shape) == 0
@@ -105,6 +116,7 @@ class ExtAtomicData(AtomicData):
         assert external_field is None or external_field.shape == torch.Size([1, 3])
         assert fermi_level is None or len(fermi_level.shape) == 0
         assert fermi_level_weight is None or len(fermi_level_weight.shape) == 0
+        assert stress_component_weight.shape == torch.Size([1, 3, 3])
         # assert polarizability is None or polarizability.shape == torch.Size([1,3,3])
         # assert polarizability_weight is None or len(polarizability_weight.shape) == 0
         assert cluster_loss_weight is None or len(cluster_loss_weight.shape) == 0
@@ -122,6 +134,7 @@ class ExtAtomicData(AtomicData):
             "external_field": external_field,
             "fermi_level": fermi_level,
             "fermi_level_weight": fermi_level_weight,
+            "stress_component_weight": stress_component_weight,
             # "polarizability": polarizability,
             # "polarizability_weight": polarizability_weight,
             "cluster_batch": cluster_batch,
@@ -311,6 +324,7 @@ class ExtAtomicData(AtomicData):
             external_field=external_field,
             fermi_level=fermi_level,
             fermi_level_weight=fermi_level_weight,
+            stress_component_weight=atomic_data.stress_component_weight,
             cluster_batch=cluster_batch,
             cluster_loss_weight=cluster_loss_weight,
             enegs=enegs,

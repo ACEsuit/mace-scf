@@ -9,11 +9,25 @@ from copy import deepcopy
 from mace.modules.loss import (
     weighted_mean_squared_error_energy,
     mean_squared_error_forces,
-    weighted_mean_squared_stress,
     reduce_loss # required for DDP
 )
 from .utils import compute_effective_index
 import logging
+
+
+def weighted_mean_squared_stress(ref: Batch, pred: TensorDict, ddp: Optional[bool] = None) -> torch.Tensor:
+    # stress: [n_graphs, 3, 3]
+    configs_weight = ref.weight.view(-1, 1, 1)  # [n_graphs, 1, 1]
+    configs_stress_weight = ref.stress_weight.view(-1, 1, 1)  # [n_graphs, 1, 1]
+    configs_stress_component_weight = ref.stress_component_weight.view(-1, 3, 3)  # [n_graphs, 3, 3]
+
+    weighted_squared_deviations = (
+        configs_weight
+        * configs_stress_weight
+        * configs_stress_component_weight
+        * torch.square(ref["stress"] - pred["stress"])
+    )
+    return reduce_loss(weighted_squared_deviations, ddp)
 
 
 def weighted_mean_squared_error_charge(ref: Batch, pred: TensorDict, ddp: Optional[bool] = None) -> torch.Tensor:
