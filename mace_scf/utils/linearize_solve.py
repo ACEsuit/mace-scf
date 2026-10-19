@@ -1,8 +1,10 @@
 import torch
 from mace.tools.scatter import scatter_sum
 
+JACOBIAN_VMAP_CHUNK_SIZE = 512 # reduce incidence of OOM errors. Tuned for 80GB A100 w/o CUEQ.
 
-def _jacobian_from_vmapped_vjps(outputs, inputs):
+
+def _jacobian_from_vmapped_vjps(outputs, inputs, create_graph: bool):
     """Build a dense Jacobian by vmapping VJPs over output basis vectors."""
     output_dim = outputs.numel()
     basis = torch.eye(output_dim, dtype=outputs.dtype, device=outputs.device)
@@ -13,10 +15,10 @@ def _jacobian_from_vmapped_vjps(outputs, inputs):
             inputs,
             grad_outputs=output_grad,
             retain_graph=True,
-            create_graph=True,
+            create_graph=create_graph,
         )[0]
 
-    return torch.vmap(vjp_row)(basis)
+    return torch.vmap(vjp_row, chunk_size=JACOBIAN_VMAP_CHUNK_SIZE)(basis)
 
 
 def linearize_and_solve_density(
@@ -90,7 +92,7 @@ def linearize_and_solve_density(
         return torch.cat([density_residual, charge_residual])
 
     residual = residual_from_flat(flat_star)
-    jacobian = _jacobian_from_vmapped_vjps(residual, flat_star).detach()
+    jacobian = _jacobian_from_vmapped_vjps(residual, flat_star, create_graph=False)
 
     delta = torch.linalg.solve(jacobian, residual.unsqueeze(-1)).squeeze(-1)
     state_1 = flat_star - delta
