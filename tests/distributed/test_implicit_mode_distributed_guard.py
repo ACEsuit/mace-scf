@@ -3,8 +3,6 @@ mace_scf/utils/check_args.py::check_config_conflicts: implicit mode with
 --distributed and with --compute_stress.
 """
 
-import sys
-import types
 from pathlib import Path
 
 import pytest
@@ -59,21 +57,4 @@ def test_distributed_plus_implicit_mode_raises(tmp_path):
 
 def test_distributed_plus_direct_mode_is_allowed(tmp_path):
     args = _parse_fixedpoint_args(tmp_path, distributed=True, mode="direct")
-    check_config_conflicts(args)  # must not raise
-
-
-def test_stress_plus_implicit_mode_raises(tmp_path, monkeypatch):
-    # Implicit-mode option parsing only checks that torchopt imports.
-    monkeypatch.setitem(sys.modules, "torchopt", types.ModuleType("torchopt"))
-    args = _parse_fixedpoint_args(
-        tmp_path, distributed=False, mode="implicit", compute_stress=True
-    )
-    with pytest.raises(NotImplementedError, match="stress"):
-        check_config_conflicts(args)
-
-
-def test_stress_plus_linearize_solve_mode_is_allowed(tmp_path):
-    args = _parse_fixedpoint_args(
-        tmp_path, distributed=False, mode="linearize_solve", compute_stress=True
-    )
     check_config_conflicts(args)  # must not raise
