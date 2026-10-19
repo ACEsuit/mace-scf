@@ -36,6 +36,8 @@ def check_config_conflicts(args: argparse.Namespace):
                     "--distributed."
                 )
             if args.compute_stress and train_stage["fixed_point_training_options"].mode == "implicit":
+                # Checked here, not only in FixedPointWrapper, so that a later
+                # implicit stage fails at startup instead of after earlier stages.
                 raise NotImplementedError(
                     "fixed-point mode 'implicit' does not support stress; "
                     "use linearize_solve or unroll_scf."
