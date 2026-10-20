@@ -85,11 +85,12 @@ def wrap_loader(dataset, device='cpu', batch_size=1, shuffle=False):
         yield batch.to(device).to_dict()
 
 
-def dataset_from_atoms(atoms, cutoff=3.0, **kwargs):
+def dataset_from_atoms(atoms, cutoff=3.0, z_table=None, **kwargs):
     keyspec = mace.data.KeySpecification()
     keyspec = mace_scf.data.update_keyspec_from_kwargs(keyspec, kwargs)
     configs = mace.data.config_from_atoms_list(atoms, key_specification=keyspec)
-    z_table = mace.tools.get_atomic_number_table_from_zs(list(set(atoms[0].get_atomic_numbers())))
+    if z_table is None:
+        z_table = mace.tools.get_atomic_number_table_from_zs(list(set(atoms[0].get_atomic_numbers())))
     dataset = [
         mace_scf.data.ExtAtomicData.from_config(
             config, 
