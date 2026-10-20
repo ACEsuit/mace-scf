@@ -371,6 +371,31 @@ def test_monotone_block_rejects_bad_options(softness_max, softness_init):
 
 
 @pytest.mark.parametrize("softness_max", SOFTNESS_MAX)
+@pytest.mark.parametrize("inversion", [False, True])
+def test_monotone_block_is_equivariant(softness_max, inversion):
+    """The monopole is assembled by slicing and padding the features by hand, so check
+    that rotating (and inverting) the inputs rotates the output multipoles."""
+    block = _monotone_block(softness_max)
+    node_attrs, node_feats, potentials = _block_inputs(block)
+    rotation = o3.rand_matrix(dtype=torch.float64)
+    if inversion:
+        rotation = -rotation
+
+    def wigner(irreps):
+        return irreps.D_from_matrix(rotation).to(DEVICE)
+
+    out = _update(block, node_attrs, node_feats, potentials)
+    rotated = _update(
+        block,
+        node_attrs,
+        node_feats @ wigner(block.node_feats_irreps).T,
+        potentials @ wigner(block.potential_irreps).T,
+    )
+    expected = out @ wigner(block.charges_irreps).T
+    assert torch.allclose(rotated, expected, atol=1e-10)
+
+
+@pytest.mark.parametrize("softness_max", SOFTNESS_MAX)
 def test_monotone_block_keeps_parent_dipoles(softness_max):
     block = _monotone_block(softness_max)
     parent = _block(field_blocks.OneBodyVariableUpdate, seed=99)
