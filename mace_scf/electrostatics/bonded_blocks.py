@@ -49,7 +49,7 @@ class OxidationStateEmbeddingBlock(torch.nn.Module):
     def __init__(
         self, 
         node_feats_irreps: o3.Irreps, 
-        oxidation_state_range: Tuple[float, float] = (-4.,4.),
+        oxidation_state_range: Tuple[float, float],
         num_basis_oxidation=8
     ):
         super().__init__()
@@ -140,7 +140,7 @@ class OxidationDependentSymmetricPredictionSourceBlock(torch.nn.Module):
         target_irreps: o3.Irreps,
         max_l: int,
         num_elements: int,
-        oxidation_state_range: Tuple[float, float] = (-4.,4.),
+        oxidation_state_range: Tuple[float, float],
         num_basis_oxidation: int = 8,
     ):
         super().__init__()
@@ -273,6 +273,7 @@ class NoFieldSymmetricPredictionSourceBlock(torch.nn.Module):
         target_irreps: o3.Irreps,
         max_l: int,
         num_elements: int,
+        oxidation_state_range: Tuple[float, float],  # unused; shared interface
     ):
         super().__init__()
 

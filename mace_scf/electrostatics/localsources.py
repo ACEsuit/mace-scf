@@ -321,6 +321,7 @@ class LocalSplitCharges(_LocalSourceModelBase):
                     target_irreps=self.interaction_irreps,
                     max_l=atomic_multipoles_max_l,
                     num_elements=num_elements,
+                    oxidation_state_range=oxidation_state_range,
                 )
                 for _ in range(num_interactions)
             ]
