@@ -50,7 +50,7 @@ $$
 Implicit differentiation avoids backpropagating through the SCF iterations.
 Instead, it differentiates the equation that defines the converged state.
 
-### Constant Fermi Level
+## Constant Fermi Level
 
 Suppose that for a given training example, the model has been iterated to self consistency. This gives a set of multipoles $\mathbf p^\ast$.
 In constant-Fermi mode, $\mu$ is fixed. The only implicit variable is
@@ -155,17 +155,23 @@ Like in implicit differentation, during training the model is first iterated to 
 The inspiration comes from quadratic QEq-like models. In that case, one has a quadratic enrergy functional $E = E_0 + \mathbf{a}^T \mathbf{p} + \frac{1}{2}\mathbf{p}^T M \mathbf{p}$, and it can be minimized by setting the derivative equall to zero: $- \mathbf{a} = M \mathbf{p}^\ast$, and solving for $\mathbf{p}^\ast$. This doesn't require any iteration and in practice one can then differentiate through the matrix solve quite easily for forces and gradients. 
 
 We can apply the same trick by first converging the model and treating the output as the approximate solution $\mathbf{p}^\text{ref}$, where 'ref' stands for 'reference'. At this point:
+
 $$
 R(\mathbf{p}^\text{ref}; \mu, \theta, \mathbf{x}) \approx \mathbf{0}
 $$
+
 This also works with $R(\mathbf{p}^\text{ref}) = \mathbf{0}$, but is easier to follow by first imagining an approximate solution. Treating $\mathbf{p}^\text{ref}$ as a fixed constant, one can write the exact solution as 
+
 $$
 \mathbf{p}^\ast = \mathbf{p}^\text{ref} + \boldsymbol{\Delta}
 $$
+
 Because the reference is very close to the solution, we will have $\boldsymbol{\Delta} \approx 0$. Now, the solution satisfies:
+
 $$
 R(\mathbf{p}^\text{ref} + \boldsymbol{\Delta}; \mu, \theta, \mathbf{x}) = R(\mathbf{p}^\text{ref}) + \frac{\partial R}{\partial \mathbf{p}} \boldsymbol\Delta = \mathbf{0}
 $$
+
 Hence we can solve for $\boldsymbol\Delta$ by computing the Jacobian $\partial R / \partial \mathbf{p}$ and solving for $\Delta$. We will find that $\boldsymbol\Delta \approx 0$, but if the Jacobian construction and inversion is differentiable, then $\Delta$ will carry the right derivatives with respect to parameters and positions.
 
 The linearize and solve method therefore works by: (i) converge the model to the solution $\mathbf{p}^\text{ref}$ and detach it from the graph, (ii) compute the jacobian and residual and solve for $\Delta$, (iii) set the computed charges as $\mathbf{p}^\ast = \mathbf{p}^\text{ref} + \boldsymbol{\Delta}$ and then use this as a differentiable object in downstream opertations.
