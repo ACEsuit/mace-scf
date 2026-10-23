@@ -196,6 +196,7 @@ class RunTrainCase:
     config: Mapping[str, Any]
     extra_args: list[str] = field(default_factory=list)
     timeout_s: int = 180
+    command_prefix: list[str] = field(default_factory=lambda: [sys.executable])
 
 
 @dataclass
@@ -310,7 +311,7 @@ def run_train_case(
         overwrite=overwrite,
     )
     cmd = [
-        sys.executable,
+        *case.command_prefix,
         str(RUN_TRAIN_SCRIPT),
         "--config",
         str(config_path),

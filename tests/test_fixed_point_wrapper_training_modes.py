@@ -165,6 +165,7 @@ def _build_wrapper(model, mode, constant_charge, linear_solve="inverse"):
             use_autograd_forces=True,
         )
     return FixedPointWrapper(
+        model=model,
         optimizer=optimizer,
         output_args=OUTPUT_ARGS,
         training_options=FixedPointTrainingOptions(
@@ -205,7 +206,7 @@ def _scalar_objective(output, objective):
 
 def _wrapper_objective_gradient(wrapper, model, batch_dict, objective):
     model.zero_grad(set_to_none=True)
-    output = wrapper(model, batch_dict, training=True)
+    output = wrapper(batch_dict, training=True)
     loss = _scalar_objective(output, objective)
     _, param = _first_parameter_for_gradient(model)
     grad = torch.autograd.grad(loss, param)[0].reshape(-1)[0].detach().cpu().item()
@@ -222,7 +223,7 @@ def _finite_difference_objective_gradient(wrapper, model, batch_dict, objective,
         plus_value = initial_value.clone()
         plus_value.reshape(-1)[0] = flat[0] + delta
         param.copy_(plus_value)
-    plus_output = wrapper(model, batch_dict, training=True)
+    plus_output = wrapper(batch_dict, training=True)
     plus_value = _scalar_objective(plus_output, objective).detach().cpu().item()
     _cleanup_model(model)
 
@@ -230,7 +231,7 @@ def _finite_difference_objective_gradient(wrapper, model, batch_dict, objective,
         minus_value = initial_value.clone()
         minus_value.reshape(-1)[0] = flat[0] - delta
         param.copy_(minus_value)
-    minus_output = wrapper(model, batch_dict, training=True)
+    minus_output = wrapper(batch_dict, training=True)
     minus_value = _scalar_objective(minus_output, objective).detach().cpu().item()
     _cleanup_model(model)
 
@@ -258,7 +259,7 @@ def _run_force_gradient_check(wrapper, model, batch_size, constant_charge, delta
     all_energies = []
 
     for batch_dict in wrap_loader(dataset, batch_size=batch_size, device=DEVICE):
-        output = wrapper(model, batch_dict, training=True)
+        output = wrapper(batch_dict, training=True)
         all_energies += list(output["energy"].detach().cpu().numpy())
         all_forces += split_to_graphs(
             output["forces"].detach().cpu().numpy(),
@@ -305,7 +306,7 @@ def test_wrapper_output_contract(mode, constant_charge, batch_size):
     wrapper = _build_wrapper(model, mode=mode, constant_charge=constant_charge)
 
     batch_dict = next(wrap_loader(dataset, batch_size=batch_size, device=DEVICE))
-    output = wrapper(model, batch_dict, training=True)
+    output = wrapper(batch_dict, training=True)
 
     assert "energy" in output
     assert "density_coefficients" in output

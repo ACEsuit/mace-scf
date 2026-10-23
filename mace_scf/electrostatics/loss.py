@@ -1,4 +1,5 @@
 import torch
+from typing import Optional
 
 from mace.tools import TensorDict
 from mace.tools.torch_geometric import Batch
@@ -9,12 +10,13 @@ from mace.modules.loss import (
     weighted_mean_squared_error_energy,
     mean_squared_error_forces,
     weighted_mean_squared_stress,
+    reduce_loss # required for DDP
 )
 from .utils import compute_effective_index
 import logging
 
 
-def weighted_mean_squared_error_charge(ref: Batch, pred: TensorDict) -> torch.Tensor:
+def weighted_mean_squared_error_charge(ref: Batch, pred: TensorDict, ddp: Optional[bool] = None) -> torch.Tensor:
     # charge: [n_graphs, ]
     configs_weight = ref.weight # [n_graphs, ]
     num_graphs = ref.ptr.numel() - 1
@@ -22,35 +24,42 @@ def weighted_mean_squared_error_charge(ref: Batch, pred: TensorDict) -> torch.Te
     total_charge = scatter_sum(
         src=pred["density_coefficients"][:,0], index=ref["batch"], dim=-1, dim_size=num_graphs
     ) # [n_graphs, ]
-    return torch.mean(configs_weight * torch.square( (ref["total_charge"] - total_charge) / num_atoms)) 
 
+    weighted_squared_deviations = configs_weight * torch.square( (ref["total_charge"] - total_charge) / num_atoms)
+    return reduce_loss(weighted_squared_deviations, ddp)
 
-def weighted_mean_squared_error_charge_extensive(ref: Batch, pred: TensorDict) -> torch.Tensor:
+def weighted_mean_squared_error_charge_extensive(ref: Batch, pred: TensorDict, ddp: Optional[bool] = None) -> torch.Tensor:
     # charge: [n_graphs, ]
     configs_weight = ref.weight # [n_graphs, ]
     num_graphs = ref.ptr.numel() - 1
     total_charge = scatter_sum(
         src=pred["density_coefficients"][:,0], index=ref["batch"], dim=-1, dim_size=num_graphs
     ) # [n_graphs, ]
-    return torch.mean(configs_weight * torch.square(ref["total_charge"] - total_charge))  
+
+    weighted_squared_deviations = configs_weight * torch.square(ref["total_charge"] - total_charge)
+    return reduce_loss(weighted_squared_deviations, ddp)
 
 
-def weighted_mean_squared_error_fermi(ref: Batch, pred: TensorDict) -> torch.Tensor:
+def weighted_mean_squared_error_fermi(ref: Batch, pred: TensorDict, ddp: Optional[bool] = None) -> torch.Tensor:
     # fermi level: [n_graphs, ]
     configs_weight = ref.weight  # [n_graphs, ]
     num_atoms = (ref.ptr[1:] - ref.ptr[:-1]) # [n_graphs, ]
     assert ref["fermi_level"].shape == pred['fermi_level'].shape
-    return torch.mean(configs_weight * torch.square( (ref["fermi_level"] - pred['fermi_level']) / num_atoms))
+
+    weighted_squared_deviations = configs_weight * torch.square( (ref["fermi_level"] - pred['fermi_level']) / num_atoms)
+    return reduce_loss(weighted_squared_deviations, ddp)
 
 
-def weighted_mean_squared_error_fermi_extensive(ref: Batch, pred: TensorDict) -> torch.Tensor:
+def weighted_mean_squared_error_fermi_extensive(ref: Batch, pred: TensorDict, ddp: Optional[bool] = None) -> torch.Tensor:
     # fermi level: [n_graphs, ]
     configs_weight = ref.weight  # [n_graphs, ]
     assert ref["fermi_level"].shape == pred['fermi_level'].shape
-    return torch.mean(configs_weight * torch.square( (ref["fermi_level"] - pred['fermi_level']) ))
+
+    weighted_squared_deviations = configs_weight * torch.square( (ref["fermi_level"] - pred['fermi_level']))
+    return reduce_loss(weighted_squared_deviations, ddp)
 
 
-def weighted_mean_squared_error_dma(ref: Batch, pred: TensorDict) -> torch.Tensor:
+def weighted_mean_squared_error_dma(ref: Batch, pred: TensorDict, ddp: Optional[bool] = None) -> torch.Tensor:
     # dma: [n_atoms, many]
     configs_weight = torch.repeat_interleave(
         ref.weight, ref.ptr[1:] - ref.ptr[:-1]
@@ -65,33 +74,30 @@ def weighted_mean_squared_error_dma(ref: Batch, pred: TensorDict) -> torch.Tenso
         ref["density_coefficients"] - pred["density_coefficients"]
     )  # [n_nodes, (max_l+1)**2]
 
-    return torch.mean(configs_weight * configs_density_coefficients_weight * sq_error)
+    weighted_squared_deviations = configs_weight * configs_density_coefficients_weight * sq_error
+    return reduce_loss(weighted_squared_deviations, ddp)
 
 
-def weighted_mean_squared_error_dipole(ref: Batch, pred: TensorDict) -> torch.Tensor:
+def weighted_mean_squared_error_dipole(ref: Batch, pred: TensorDict, ddp: Optional[bool] = None) -> torch.Tensor:
     # dipole: [n_graphs, 3]
     configs_weight = ref.weight.view(-1, 1)  # [n_graphs, 1]
     configs_dipole_weight = ref.dipole_weight.view(-1, 3)  # [n_graphs, 3]
     num_atoms = (ref.ptr[1:] - ref.ptr[:-1]).view(-1, 1)  # [n_graphs, 1]
-    return torch.mean(
-        configs_weight
-        * configs_dipole_weight
-        * torch.square((ref["dipole"] - pred["dipole"]) / num_atoms)
-    )
+
+    weighted_squared_deviations = configs_weight * configs_dipole_weight * torch.square((ref["dipole"] - pred["dipole"]) / num_atoms)
+    return reduce_loss(weighted_squared_deviations, ddp)
 
 
-def weighted_mean_squared_error_dipole_extensive(ref: Batch, pred: TensorDict) -> torch.Tensor:
+def weighted_mean_squared_error_dipole_extensive(ref: Batch, pred: TensorDict, ddp: Optional[bool] = None) -> torch.Tensor:
     # dipole: [n_graphs, 3]
     configs_weight = ref.weight.view(-1, 1)  # [n_graphs, 1]
     configs_dipole_weight = ref.dipole_weight.view(-1, 3)  # [n_graphs, 3]
-    return torch.mean(
-        configs_weight
-        * configs_dipole_weight
-        * torch.square(ref["dipole"] - pred["dipole"])
-    )
+
+    weighted_squared_deviations = configs_weight * configs_dipole_weight * torch.square(ref["dipole"] - pred["dipole"])
+    return reduce_loss(weighted_squared_deviations, ddp)
 
 
-def weighted_mean_squared_error_esp(ref: Batch, pred: TensorDict) -> torch.Tensor:
+def weighted_mean_squared_error_esp(ref: Batch, pred: TensorDict, ddp: Optional[bool] = None) -> torch.Tensor:
     # esp: [n_atoms, 1]
     configs_weight = torch.repeat_interleave(
         ref.weight, ref.ptr[1:] - ref.ptr[:-1]
@@ -105,10 +111,11 @@ def weighted_mean_squared_error_esp(ref: Batch, pred: TensorDict) -> torch.Tenso
         pred["esps_dft"].view(-1, 1) - pred["esps"].view(-1, 1)
     )  # [n_nodes, 1]
 
-    return torch.mean(configs_weight * configs_electrostatic_potentials_weight * sq_error)
+    weighted_squared_deviations = configs_weight * configs_electrostatic_potentials_weight * sq_error
+    return reduce_loss(weighted_squared_deviations, ddp)
 
 
-def weighted_mean_squared_error_field_feats(ref: Batch, pred: TensorDict) -> torch.Tensor:
+def weighted_mean_squared_error_field_feats(ref: Batch, pred: TensorDict, ddp: Optional[bool] = None) -> torch.Tensor:
     # esp: [n_atoms, 1]
     configs_weight = torch.repeat_interleave(
         ref.weight, ref.ptr[1:] - ref.ptr[:-1]
@@ -122,11 +129,12 @@ def weighted_mean_squared_error_field_feats(ref: Batch, pred: TensorDict) -> tor
         pred["feats_no_mu_model"] - pred["feats_no_mu_dft"]
     ), axis=-1).view(-1,1)  # [n_nodes, 1]
 
-    return torch.mean(configs_weight * configs_electrostatic_potentials_weight * sq_error)
+    weighted_squared_deviations = configs_weight * configs_electrostatic_potentials_weight * sq_error
+    return reduce_loss(weighted_squared_deviations, ddp)
 
 
 def weighted_mean_squared_error_polarizability(
-    ref: Batch, pred: TensorDict
+    ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
 ) -> torch.Tensor:
     configs_weight = ref.weight.view(-1, 1, 1) 
     configs_polarizability_weight = ref.polarizability_weight.view(-1, 1, 1)  
@@ -134,11 +142,13 @@ def weighted_mean_squared_error_polarizability(
     sq_error = torch.square(
         (ref["polarizability"].view(-1, 3, 3) - pred["polarizability"]) / num_atoms
     )
-    return torch.mean(configs_weight * configs_polarizability_weight * sq_error)
+
+    weighted_squared_deviations = configs_weight * configs_polarizability_weight * sq_error
+    return reduce_loss(weighted_squared_deviations, ddp)
 
 
 def weighted_mean_squared_cluster_virial_extensive(
-    ref: Batch, pred: TensorDict
+    ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
 ) -> torch.Tensor:
     num_graphs = ref.ptr.numel() - 1
     mol_ids, unique_combinations = compute_effective_index([ref["batch"], ref["cluster_batch"]])
@@ -158,11 +168,12 @@ def weighted_mean_squared_cluster_virial_extensive(
     configs_weight = ref.weight.view(-1, 1)  # [n_graphs, 1]
     configs_cluster_virial_weight = ref.cluster_loss_weight.view(-1, 1)  # [n_graphs, 1]
 
-    return torch.mean(configs_weight * configs_cluster_virial_weight * torch.square(config_delta_work))
+    weighted_squared_deviations = configs_weight * configs_cluster_virial_weight * torch.square(config_delta_work)
+    return reduce_loss(weighted_squared_deviations, ddp)
 
 
 def weighted_mean_squared_cluster_virial(
-    ref: Batch, pred: TensorDict
+    ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
 ) -> torch.Tensor:
     num_graphs = ref.ptr.numel() - 1
     num_atoms = (ref.ptr[1:] - ref.ptr[:-1]).view(-1, 1) # [n_graphs, 1]
@@ -183,11 +194,12 @@ def weighted_mean_squared_cluster_virial(
     configs_weight = ref.weight.view(-1, 1)  # [n_graphs, 1]
     configs_cluster_virial_weight = ref.cluster_loss_weight.view(-1, 1)  # [n_graphs, 1]
 
-    return torch.mean(configs_weight * configs_cluster_virial_weight * torch.square(config_delta_work) / num_atoms)
+    weighted_squared_deviations = configs_weight * configs_cluster_virial_weight * torch.square(config_delta_work) / num_atoms
+    return reduce_loss(weighted_squared_deviations, ddp)
 
 
 def weighted_mean_squared_molecular_forces(
-    ref: Batch, pred: TensorDict
+    ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
 ) -> torch.Tensor:
     num_graphs = ref.ptr.numel() - 1
     num_atoms = (ref.ptr[1:] - ref.ptr[:-1]).view(-1, 1) # [n_graphs, 1]
@@ -202,23 +214,21 @@ def weighted_mean_squared_molecular_forces(
     configs_weight = ref.weight.view(-1, 1)  # [n_graphs, 1]
     configs_forces_weight = ref.forces_weight.view(-1, 1)  # [n_graphs, 1]
 
-    return torch.mean(configs_weight * configs_forces_weight * err / num_atoms)
+    weighted_squared_deviations = configs_weight * configs_forces_weight * err / num_atoms
+    return reduce_loss(weighted_squared_deviations, ddp)
 
 
 def fermi_level_gradient_function(
-    ref: Batch, pred: TensorDict
+    ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
 ) -> torch.Tensor:
-    return torch.mean(torch.relu(pred["dq_dmu"]))
+    return reduce_loss(torch.relu(pred["dq_dmu"]), ddp)
 
 
 def final_terms_fixedpoint_scf_stability(
-    ref: Batch, pred: TensorDict
+    ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
 ) -> torch.Tensor:
-    num_graphs = ref.ptr.numel() - 1
     difference = pred["charges_history"][...,-1] - pred["charges_history"][...,-2]
-    return torch.mean(
-        torch.abs(difference)
-    )
+    return reduce_loss(torch.abs(difference), ddp)
 
 
 class FixedPointStability(torch.nn.Module):
@@ -228,9 +238,9 @@ class FixedPointStability(torch.nn.Module):
             self.activation = torch.nn.Softplus(beta=beta, threshold=20.0)
         else:
             self.activation = torch.nn.relu
-        self.offset = offset    
-    
-    def __call__(self, ref: Batch, pred: TensorDict) -> torch.Tensor:
+        self.offset = offset
+
+    def __call__(self, ref: Batch, pred: TensorDict, ddp: Optional[bool] = None) -> torch.Tensor:
         num_graphs = ref.ptr.numel() - 1
         # scf_random_vector_stability_loss: [n_graphs, 1]
         perturbation_norms = scatter_sum(
@@ -239,7 +249,7 @@ class FixedPointStability(torch.nn.Module):
         output_norms = scatter_sum(
             pred["perturbed_density"] ** 2, ref["batch"], dim=0, dim_size=num_graphs
         )
-        return torch.mean(self.activation(output_norms / perturbation_norms - self.offset))
+        return reduce_loss(self.activation(output_norms / perturbation_norms - self.offset), ddp)
 
 
 _LOSS_FUNCTIONS = {
