@@ -298,13 +298,23 @@ def get_param_options(model, args):
                 "weight_decay": args.local_charges_weight_decay,
             }
         )
+        field_block_params = dict(model.field_dependent_charges_map.named_parameters())
+        softness_bias = field_block_params.pop("softness_bias", None)
         param_options["params"].append(
             {
                 "name": "field_dependent_charges_map",
-                "params": model.field_dependent_charges_map.parameters(),
+                "params": list(field_block_params.values()),
                 "weight_decay": args.field_block_weight_decay,
             }
         )
+        if softness_bias is not None:
+            param_options["params"].append(
+                {
+                    "name": "field_dependent_charges_map",
+                    "params": [softness_bias],
+                    "weight_decay": 0.0,
+                }
+            )
         param_options["params"].append(
             {
                 "name": "local_electron_energy",

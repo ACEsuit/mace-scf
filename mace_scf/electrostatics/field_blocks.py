@@ -543,6 +543,14 @@ class OneBodyVariableUpdate(FieldUpdateBlock):
         local_charges: torch.Tensor,
         total_charges: torch.Tensor,
     ) -> torch.Tensor:
+        return self._multipoles(node_attrs, node_feats, potential_features)
+
+    def _multipoles(
+        self,
+        node_attrs: torch.Tensor,
+        node_feats: torch.Tensor,
+        potential_features: torch.Tensor,
+    ) -> torch.Tensor:
         mixed_feats = self.potential_embedding(
             potential_features,
             node_feats,
@@ -553,6 +561,86 @@ class OneBodyVariableUpdate(FieldUpdateBlock):
         new_feats = self.tp_out(node_feats, nonlin_feats)
         multipoles = self.element_select_out(new_feats, node_attrs)
         return multipoles
+
+
+@compile_mode("script")
+class OneBodyMonotoneChargeUpdate(OneBodyVariableUpdate):
+    """OneBodyVariableUpdate whose monopole cannot increase with the l=0 potential.
+    Like OneBodyVariableUpdate, monopole is still linear wrt l=0 potential.
+    """
+
+    def _setup(
+        self,
+        softness_max: Optional[float] = None,
+        softness_init: float = 0.05,
+        **kwargs,
+    ) -> None:
+        super()._setup(**kwargs)
+        if softness_max is not None and softness_max <= 0.0:
+            raise ValueError(f"softness_max must be positive, got {softness_max}")
+        high = float("inf") if softness_max is None else softness_max
+        if not 0.0 < softness_init < high:
+            raise ValueError(
+                f"softness_init={softness_init} is outside the range (0, {high}) "
+                f"of S for softness_max={softness_max}"
+            )
+        self.bounded_softness = softness_max is not None
+        self.softness_max = softness_max
+
+        # the bias b that gives S = softness_init: g^-1(softness_init)
+        if self.bounded_softness:
+            init_bias = float(np.log(softness_init / (self.softness_max - softness_init))) # sigmoid inverse
+        else:
+            init_bias = softness_init + float(np.log(-np.expm1(-softness_init))) # softplus inverse
+
+        scalar = o3.Irrep(0, 1)
+        assert self.potential_irreps[0].ir == scalar and all(
+            mul_ir.ir != scalar for mul_ir in self.potential_irreps[1:]
+        ), f"expected the l=0 potential features first, got {self.potential_irreps}"
+        assert (
+            self.charges_irreps[0].mul == 1 and self.charges_irreps[0].ir == scalar
+        ), f"expected the monopole first, got {self.charges_irreps}"
+        self.num_scalar_potentials = self.potential_irreps[0].mul
+
+
+        self.softness_linear = o3.Linear(
+            self.node_feats_irreps, o3.Irreps(f"{self.num_scalar_potentials}x0e")
+        )
+
+        # per-element bias, set so softness starts spread around softness_init
+        self.softness_bias = torch.nn.Parameter(
+            torch.full(
+                (self.node_attrs_irreps.dim, self.num_scalar_potentials),
+                init_bias,
+                dtype=torch.get_default_dtype(),
+            )
+        )
+
+    def softness(self, node_attrs: torch.Tensor, node_feats: torch.Tensor) -> torch.Tensor:
+        x = self.softness_linear(node_feats) + node_attrs @ self.softness_bias
+        if self.bounded_softness:
+            return self.softness_max * torch.sigmoid(x)
+        return torch.nn.functional.softplus(x)
+
+    def forward(
+        self,
+        node_attrs: torch.Tensor,
+        node_feats: torch.Tensor,
+        edge_attrs: torch.Tensor,
+        edge_feats: torch.Tensor,
+        edge_index: torch.Tensor,
+        potential_features: torch.Tensor,
+        local_charges: torch.Tensor,
+        total_charges: torch.Tensor,
+    ) -> torch.Tensor:
+        n0 = self.num_scalar_potentials
+        full = self._multipoles(node_attrs, node_feats, potential_features) # take the l=1 multipoles from the parent block
+        scalar_potentials = potential_features[:, :n0]
+        without_scalar_potentials = torch.nn.functional.pad(potential_features[:, n0:], (n0, 0))
+        a = self._multipoles(node_attrs, node_feats, without_scalar_potentials)[:, :1]
+        softness = self.softness(node_attrs, node_feats)
+        monopole = (a - torch.sum(softness * scalar_potentials, dim=-1, keepdim=True))
+        return torch.cat([monopole, full[:, 1:]], dim=-1)
 
 
 @compile_mode("script")

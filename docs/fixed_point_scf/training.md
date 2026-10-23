@@ -93,9 +93,25 @@ fixedpoint_update_config:
 You should choose `type` from:
 
 - OneBodyVariableUpdate
+- OneBodyMonotoneChargeUpdate
 - ManyBodyUpdate
 
 The manybody update is greatly more expensive, since it needs to be iterated as the SCF converges. We generally haven't seem substantial improvements with the many body update, and it is mostly useful for experimentation.
+
+`OneBodyMonotoneChargeUpdate` guarantees $\partial q_i / \partial \mu \le 0$ on every atom, which helps with constant-charge SCF stability. Options:
+
+- `softness_max`: `None` (default) for softplus, or a number c for c * sigmoid.
+- `softness_init`: initial softness (default 0.05). Values above ~0.4 can stop the SCF
+  converging.
+
+```yaml
+fixedpoint_update_config:
+  type: OneBodyMonotoneChargeUpdate
+  potential_embedding_cls: BiasedLinearPotentialEmbedding
+  nonlinearity_cls: NoNonLinearity
+  softness_max: null     # or e.g. 1.0
+  softness_init: 0.05
+```
 
 The `nonlinearity_cls` can currently take valuees:
 
