@@ -11,6 +11,7 @@ from e3nn.util.jit import compile_mode
 from mace.modules.utils import (
     compute_forces,
     compute_hessians_vmap,
+    get_symmetric_displacement,
 )
 
 
@@ -61,6 +62,45 @@ def compute_total_charge_dipole(
     )
 
     return total_charge, dipole
+
+
+def prepare_strain(
+    positions: torch.Tensor,
+    shifts: torch.Tensor,
+    unit_shifts: torch.Tensor,
+    cell: torch.Tensor,
+    edge_index: torch.Tensor,
+    batch: torch.Tensor,
+    num_graphs: int,
+    compute_displacement: bool,
+) -> Tuple[
+    torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
+]:
+    """Set up the strain inputs for virials and stress.
+
+    Returns (positions, shifts, displacement, cell, rcell, volume).
+    """
+    cell = cell.clone().view(-1, 3, 3)
+    if compute_displacement:
+        positions, shifts, displacement = get_symmetric_displacement(
+            positions=positions,
+            unit_shifts=unit_shifts,
+            cell=cell,
+            edge_index=edge_index,
+            num_graphs=num_graphs,
+            batch=batch,
+        )
+        cell.requires_grad_(True)
+    else:
+        displacement = torch.zeros(
+            (num_graphs, 3, 3),
+            dtype=positions.dtype,
+            device=positions.device,
+        )
+
+    rcell = 2 * np.pi * torch.linalg.inv_ex(cell.mT)[0]
+    volume = torch.linalg.det(cell).abs()
+    return positions, shifts, displacement, cell, rcell, volume
 
 
 def compute_forces_virials_cellstress(

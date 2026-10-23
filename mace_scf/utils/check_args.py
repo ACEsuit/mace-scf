@@ -30,6 +30,18 @@ def check_config_conflicts(args: argparse.Namespace):
                 fixed_point_training_options_from_stage(train_stage)
             )
             train_stage.pop("scf_training_options", None)
+            if args.distributed and train_stage["fixed_point_training_options"].mode == "implicit":
+                raise NotImplementedError(
+                    "fixed-point mode 'implicit' is not tested with "
+                    "--distributed."
+                )
+            if args.compute_stress and train_stage["fixed_point_training_options"].mode == "implicit":
+                # Checked here, not only in FixedPointWrapper, so that a later
+                # implicit stage fails at startup instead of after earlier stages.
+                raise NotImplementedError(
+                    "fixed-point mode 'implicit' does not support stress; "
+                    "use linearize_solve or unroll_scf."
+                )
     else:
         for train_stage in args.train_schedule:
             assert "scf_training_options" not in train_stage, f"scf_training_options should not be set for model={args.model}"
@@ -168,8 +180,6 @@ def check_train_test_files(args):
 
 
 def check_unsupported_training_options(args):
-    if args.distributed:
-        raise ValueError("Distributed training is not supported in this repo right now")
     if args.statistics_file is not None:
         raise ValueError(
             "statistics_file is not supported in this repo right now. "

@@ -1,8 +1,10 @@
 import torch
 from mace.tools.scatter import scatter_sum
 
+JACOBIAN_VMAP_CHUNK_SIZE = 512 # reduce incidence of OOM errors. Tuned for 80GB A100 w/o CUEQ.
 
-def _jacobian_from_vmapped_vjps(outputs, inputs):
+
+def _jacobian_from_vmapped_vjps(outputs, inputs, create_graph: bool):
     """Build a dense Jacobian by vmapping VJPs over output basis vectors."""
     output_dim = outputs.numel()
     basis = torch.eye(output_dim, dtype=outputs.dtype, device=outputs.device)
@@ -13,10 +15,10 @@ def _jacobian_from_vmapped_vjps(outputs, inputs):
             inputs,
             grad_outputs=output_grad,
             retain_graph=True,
-            create_graph=True,
+            create_graph=create_graph,
         )[0]
 
-    return torch.vmap(vjp_row)(basis)
+    return torch.vmap(vjp_row, chunk_size=JACOBIAN_VMAP_CHUNK_SIZE)(basis)
 
 
 def linearize_and_solve_density(
@@ -90,10 +92,26 @@ def linearize_and_solve_density(
         return torch.cat([density_residual, charge_residual])
 
     residual = residual_from_flat(flat_star)
-    jacobian = _jacobian_from_vmapped_vjps(residual, flat_star)
+    jacobian = _jacobian_from_vmapped_vjps(residual, flat_star, create_graph=False)
 
     delta = torch.linalg.solve(jacobian, residual.unsqueeze(-1)).squeeze(-1)
-    solved_state = flat_star - delta
+    state_1 = flat_star - delta
+
+    # Second chord step (frozen Jacobian) makes the solution accurate to
+    # second order, so mixed derivatives d2x/dr dtheta (force and stress
+    # parameter gradients) are exact. Checkable with
+    # tests/test_fixed_point_parameter_gradients.py:
+    # 1) one step, detached J: wrong (only first derivatives exact).
+    # 2) one step, attached J: right only if d2R/dx2 == 0, e.g.
+    #    nonlinearity_cls == 'NoNonLinearity'.
+    # 3) two steps, attached or detached J: right. Detached (used here)
+    #    avoids differentiating through the Jacobian construction,
+    #    which halves required memory.
+    # Third-order losses (e.g. Hessians) would require more testing.
+
+    delta = torch.linalg.solve(jacobian, residual_from_flat(state_1).unsqueeze(-1)).squeeze(-1)
+    solved_state = state_1 - delta
+
     density, fermi_level = extract_state(solved_state)
 
     fermi_features = model.features_from_fermi_level(

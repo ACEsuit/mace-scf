@@ -3,8 +3,10 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 import torch
+from torch.utils.data import Subset
 from prettytable import PrettyTable
 
+from mace.modules.loss import is_ddp_enabled
 from mace.tools import torch_geometric
 from mace.tools.scatter import scatter_sum
 from mace.tools.torch_tools import tensor_dict_to_device
@@ -48,6 +50,16 @@ def scf_summary_mixing_values(train_stage: dict) -> Tuple[float, float]:
 
 def _rebuild_loader(loader, batch_size: int = 1):
     dataset = loader.dataset
+    if is_ddp_enabled():
+        # Shard the (unsampled, full) dataset across ranks so the SCF
+        # diagnostic parallelizes instead of running entirely on rank 0.
+        # A plain stride split (not DistributedSampler) keeps every graph
+        # covered exactly once -- DistributedSampler's drop_last=False
+        # padding would repeat a few graphs across ranks.
+        rank = torch.distributed.get_rank()
+        world_size = torch.distributed.get_world_size()
+        indices = list(range(rank, len(dataset), world_size))
+        dataset = Subset(dataset, indices)
     return torch_geometric.dataloader.DataLoader(
         dataset=dataset,
         batch_size=batch_size,
@@ -419,6 +431,18 @@ def _evaluate_one_setting(
                 param.grad = None
             del batch_dict
             del batch
+
+        if is_ddp_enabled():
+            # statuses/steps/final_changes are plain Python lists of
+            # primitives (not GPU tensors), so all_gather_object is the
+            # natural collective here.
+            gathered = [None] * torch.distributed.get_world_size()
+            torch.distributed.all_gather_object(
+                gathered, (statuses, steps, final_changes)
+            )
+            statuses = [s for local in gathered for s in local[0]]
+            steps = [s for local in gathered for s in local[1]]
+            final_changes = [c for local in gathered for c in local[2]]
 
         result[name] = {
             "statuses": statuses,

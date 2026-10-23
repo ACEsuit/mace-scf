@@ -17,6 +17,9 @@ class LocalState(NamedTuple):
     k_vectors_norms_squared: torch.Tensor
     k_vectors_batch: torch.Tensor
     k0_mask: torch.Tensor
+    displacement: torch.Tensor
+    cell: torch.Tensor
+    volume: torch.Tensor
 
 
 class SCFState(NamedTuple):

@@ -111,6 +111,7 @@ class FixedPointSCFRunner:
         local_state = model.local_part(
             data,
             compute_force=compute_force,
+            compute_displacement=compute_virials or compute_stress,
         )
 
         initial_density = self.get_initial_density(local_state, data)

@@ -5,10 +5,7 @@ from e3nn import o3
 import logging
 
 from mace.tools.scatter import scatter_sum
-from mace.modules.utils import (
-    get_edge_vectors_and_lengths,
-    get_outputs,
-)
+from mace.modules.utils import get_edge_vectors_and_lengths
 
 from mace.modules import (
     AtomicEnergiesBlock,
@@ -35,7 +32,7 @@ from .field_blocks import (
     MultiLayerFeatureMixer,
     GeneralNonLinearBiasReadoutBlock,
 )
-from .utils import compute_total_charge_dipole
+from .utils import compute_total_charge_dipole, get_outputs, prepare_strain
 from .fixed_point_state import LocalState
 
 
@@ -394,8 +391,13 @@ class FixedPointCore(torch.nn.Module):
         self,
         data: Dict[str, torch.Tensor],
         compute_force: bool = False,
+        compute_displacement: bool = False,
     ) -> LocalState:
-        """Run the MACE backbone and prepare all SCF-independent state."""
+        """Run the MACE backbone and prepare all SCF-independent state.
+
+        With compute_displacement, the positions, shifts and cell carry the
+        strain, so virials and stress can be computed in build_observables.
+        """
         if not hasattr(self, "from_ell_max_field_update"):
             self.from_ell_max_field_update = 9
 
@@ -403,6 +405,17 @@ class FixedPointCore(torch.nn.Module):
         if compute_force:
             positions.requires_grad_(True)
         num_graphs = data["ptr"].numel() - 1
+
+        positions, shifts, displacement, cell, rcell, volume = prepare_strain(
+            positions=positions,
+            shifts=data["shifts"],
+            unit_shifts=data["unit_shifts"],
+            cell=data["cell"],
+            edge_index=data["edge_index"],
+            batch=data["batch"],
+            num_graphs=num_graphs,
+            compute_displacement=compute_displacement,
+        )
 
         # Atomic energies
         node_e0 = self.atomic_energies_fn(data["node_attrs"]).squeeze(-1)
@@ -415,7 +428,7 @@ class FixedPointCore(torch.nn.Module):
         vectors, lengths = get_edge_vectors_and_lengths(
             positions=positions,
             edge_index=data["edge_index"],
-            shifts=data["shifts"],
+            shifts=shifts,
         )
         edge_attrs = self.spherical_harmonics(permute_to_e3nn_convention(vectors))
         edge_feats, cutoff = self.radial_embedding(
@@ -426,8 +439,8 @@ class FixedPointCore(torch.nn.Module):
         k_vectors, k_vectors_norms_squared, k_vectors_batch, k0_mask = (
             compute_k_vectors_flat(
                 self.kspace_cutoff,
-                data["cell"].view(-1, 3, 3),
-                data["rcell"].view(-1, 3, 3),
+                cell,
+                rcell,
             )
         )
 
@@ -482,7 +495,7 @@ class FixedPointCore(torch.nn.Module):
             k0_mask=k0_mask,
             node_positions=positions,
             batch=data["batch"],
-            volume=data["volume"],
+            volume=volume,
             pbc=data["pbc"].view(-1, 3),
         )
         self.electric_potential_descriptor.static_quantities = None
@@ -510,6 +523,9 @@ class FixedPointCore(torch.nn.Module):
             k_vectors_norms_squared=k_vectors_norms_squared,
             k_vectors_batch=k_vectors_batch,
             k0_mask=k0_mask,
+            displacement=displacement,
+            cell=cell,
+            volume=volume,
         )
 
     def scf_step(
@@ -608,7 +624,7 @@ class FixedPointCore(torch.nn.Module):
             source_feats=density,
             node_positions=positions,
             batch=data["batch"],
-            volume=data["volume"],
+            volume=local_state.volume,
             pbc=data["pbc"].view(-1, 3),
         )
         total_energy = total_energy + electro_energy + torch.sum(
@@ -640,15 +656,12 @@ class FixedPointCore(torch.nn.Module):
             esps = None
             esps_dft = None
 
-        # Forces
-        displacement = torch.zeros(
-            (num_graphs, 3, 3), dtype=positions.dtype, device=positions.device
-        )
-        forces, _, _, _, _ = get_outputs(
+        # Forces, virials and stress
+        forces, virials, stress, _, _ = get_outputs(
             energy=total_energy,
             positions=positions,
-            displacement=displacement,
-            cell=data["cell"],
+            displacement=local_state.displacement,
+            cell=local_state.cell,
             training=training,
             compute_force=compute_force,
             compute_virials=compute_virials,
@@ -658,6 +671,9 @@ class FixedPointCore(torch.nn.Module):
         return {
             "energy": total_energy,
             "forces": forces,
+            "virials": virials,
+            "stress": stress,
+            "displacement": local_state.displacement,
             "contributions": local_state.energies,
             "density_coefficients": density,
             "charges_history": None,
