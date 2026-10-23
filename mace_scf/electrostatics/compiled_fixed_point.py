@@ -3,13 +3,14 @@ from typing import Dict, NamedTuple, Optional, Tuple
 import torch
 
 from mace.modules.utils import get_edge_vectors_and_lengths
-from mace.tools.scatter import scatter_sum
+from mace.tools.scatter import scatter_sum, scatter_mean
 
 from graph_longrange.utils import permute_to_e3nn_convention
 
 from .compiled_kspace import KSpacePlanner
 from .e3nn_compile_utils import replace_e3nn_script_codegen_with_fx
 from .fixed_point_core import FixedPointCore
+from .fixed_point_scf import scf_stop_status
 
 try:
     _dynamo_disable = torch.compiler.disable
@@ -420,7 +421,7 @@ class FixedPointSCFCompiledCore(torch.nn.Module):
         local_state: CompiledFixedPointLocalState,
         charge_density: torch.Tensor,
         chunk_size: int,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         fermi_level_features = self._compute_fermi_level_features(
             batch=batch,
             positions=positions,
@@ -428,6 +429,7 @@ class FixedPointSCFCompiledCore(torch.nn.Module):
         )
         field_feats = local_state.external_field_features + fermi_level_features
 
+        step_densities = []
         for _ in range(chunk_size):
             field_dep, field_feats = self._scf_step(
                 node_attrs=node_attrs,
@@ -440,8 +442,9 @@ class FixedPointSCFCompiledCore(torch.nn.Module):
             charge_density = charge_density + (
                 new_density - charge_density
             ) * self.mixing_parameter
+            step_densities.append(charge_density)
 
-        return charge_density, field_feats
+        return charge_density, field_feats, torch.stack(step_densities, dim=-1)
 
     def _constant_charge_redistribution(
         self,
@@ -644,8 +647,10 @@ class FixedPointSCFCompiledCore(torch.nn.Module):
         fermi_level: torch.Tensor,
         clamp_delta_mu: torch.Tensor,
         chunk_size: int,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         field_feats = local_state.external_field_features
+        step_densities = []
+        fermi_pre_update = fermi_level
 
         for step_i in range(chunk_size):
             node_fermi = torch.index_select(fermi_level, 0, batch)
@@ -731,9 +736,18 @@ class FixedPointSCFCompiledCore(torch.nn.Module):
             clamped_delta_mu = delta_mu.clamp(-1.0, 1.0)
             should_clamp = clamp_delta_mu[step_i].to(dtype=torch.bool)
             delta_mu = torch.where(should_clamp, clamped_delta_mu, delta_mu)
+            fermi_pre_update = fermi_level
             fermi_level = fermi_level + delta_mu
+            step_densities.append(charge_density)
 
-        return charge_density, charge_density_renormalized, fermi_level, field_feats
+        return (
+            charge_density,
+            charge_density_renormalized,
+            fermi_level,
+            field_feats,
+            torch.stack(step_densities, dim=-1),
+            fermi_pre_update,
+        )
 
     def _compute_coulomb_energy(
         self,
@@ -1075,7 +1089,7 @@ class FixedPointSCFCompiledChunk(torch.nn.Module):
         charge_density: torch.Tensor,
         charge_density_renormalized: torch.Tensor,
         clamp_delta_mu: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         if self.constant_charge:
             return self.core._run_fixed_step_constant_charge_scf_chunk(
                 node_attrs=node_attrs,
@@ -1091,7 +1105,7 @@ class FixedPointSCFCompiledChunk(torch.nn.Module):
                 chunk_size=self.chunk_size,
             )
 
-        density, field_feats = self.core._run_fixed_step_constant_fermi_scf_chunk(
+        density, field_feats, step_densities = self.core._run_fixed_step_constant_fermi_scf_chunk(
             node_attrs=node_attrs,
             edge_index=edge_index,
             batch=batch,
@@ -1101,7 +1115,7 @@ class FixedPointSCFCompiledChunk(torch.nn.Module):
             charge_density=charge_density,
             chunk_size=self.chunk_size,
         )
-        return density, density, fermi_level, field_feats
+        return density, density, fermi_level, field_feats, step_densities, fermi_level
 
 
 class CompiledFixedPointEvaluator:
@@ -1113,6 +1127,8 @@ class CompiledFixedPointEvaluator:
         mixing_parameter: float,
         constant_charge: bool,
         compile_options: Optional[CompiledFixedPointOptions] = None,
+        adaptive: bool = False,
+        scf_tolerance: float = 1e-6,
     ):
         if not isinstance(model, FixedPointCore):
             raise NotImplementedError(
@@ -1132,6 +1148,8 @@ class CompiledFixedPointEvaluator:
         self.num_scf_steps = int(num_scf_steps)
         self.mixing_parameter = float(mixing_parameter)
         self.constant_charge = bool(constant_charge)
+        self.adaptive = bool(adaptive)
+        self.scf_tolerance = float(scf_tolerance)
         self.kspace_planner = KSpacePlanner(model.kspace_cutoff)
         self.compile_scope = "none" if compile_options is None else compile_options.scope
         if self.compile_scope not in (
@@ -1152,6 +1170,8 @@ class CompiledFixedPointEvaluator:
             if self.compile_chunk_size <= 0:
                 raise ValueError("compile_chunk_size must be positive for scf_chunk.")
             self._validate_chunk_num_scf_steps(self.num_scf_steps)
+        if self.adaptive and self.compile_scope != "scf_chunk":
+            raise ValueError("adaptive=True requires compile_scope='scf_chunk'.")
 
         core = FixedPointSCFCompiledCore(
             model=model,
@@ -1234,7 +1254,7 @@ class CompiledFixedPointEvaluator:
             "compile_scope='scf_chunk'."
         )
 
-    def _prepare_inputs(self, data: Dict[str, torch.Tensor]) -> PreparedFixedPointInputs:
+    def _prepare_inputs(self, data: Dict[str, torch.Tensor], initial_fermi_level: Optional[torch.Tensor] = None) -> PreparedFixedPointInputs:
         positions = data["positions"].detach().clone().requires_grad_(True)
         num_graphs = data["ptr"].numel() - 1
 
@@ -1253,6 +1273,8 @@ class CompiledFixedPointEvaluator:
             fermi_level = self.model.fermi_level_offset.expand(num_graphs).clone()
         else:
             fermi_level = fermi_level.view(num_graphs)
+        if initial_fermi_level is not None and self.constant_charge:
+            fermi_level = initial_fermi_level.detach().clone().view(num_graphs)
         if self.constant_charge:
             fermi_level = fermi_level.detach().clone().requires_grad_(True)
 
@@ -1312,8 +1334,17 @@ class CompiledFixedPointEvaluator:
             total_charge=total_charge,
         )
 
-    def evaluate(self, data: Dict[str, torch.Tensor]) -> Dict[str, Optional[torch.Tensor]]:
-        prepared = self._prepare_inputs(data)
+    def evaluate(
+        self,
+        data: Dict[str, torch.Tensor],
+        initial_charge_density: Optional[torch.Tensor] = None,
+        initial_fermi_level: Optional[torch.Tensor] = None,
+    ) -> Dict[str, Optional[torch.Tensor]]:
+        if self.compiled_chunk is None and (
+            initial_charge_density is not None or initial_fermi_level is not None
+        ):
+            raise ValueError("SCF restart seeds require compile scope 'scf_chunk'.")
+        prepared = self._prepare_inputs(data, initial_fermi_level=initial_fermi_level)
         if self.compiled_chunk is not None:
             self._validate_chunk_num_scf_steps(self.num_scf_steps)
             (
@@ -1352,7 +1383,11 @@ class CompiledFixedPointEvaluator:
                 k_vector_batch=k_vector_batch,
                 k0_mask=k0_mask,
             )
-            charge_density = local_state.field_independent_charge_density.clone()
+            charge_density = (
+                initial_charge_density.detach().clone()
+                if initial_charge_density is not None
+                else local_state.field_independent_charge_density.clone()
+            )
             charge_density_renormalized = charge_density
 
             if self.constant_charge:
@@ -1373,6 +1408,10 @@ class CompiledFixedPointEvaluator:
                 field_feats = local_state.external_field_features
 
             num_chunks = (self.num_scf_steps - 1) // self.compile_chunk_size
+            num_graphs = ptr.numel() - 1
+            if self.adaptive:
+                history = [charge_density.detach().clone().unsqueeze(-1)]
+                status = "max_steps_reached"
             for chunk_i in range(num_chunks):
                 clamp_delta_mu = torch.ones(
                     (self.compile_chunk_size,),
@@ -1381,11 +1420,14 @@ class CompiledFixedPointEvaluator:
                 )
                 if self.constant_charge and chunk_i == num_chunks - 1:
                     clamp_delta_mu[-1] = False
+                prev_density = charge_density
                 (
                     charge_density,
                     charge_density_renormalized,
                     fermi_level,
                     field_feats,
+                    step_densities,
+                    fermi_pre_update,
                 ) = self.compiled_chunk(
                     node_attrs,
                     positions,
@@ -1398,6 +1440,22 @@ class CompiledFixedPointEvaluator:
                     charge_density_renormalized,
                     clamp_delta_mu,
                 )
+                if self.adaptive:
+                    history.append(step_densities.detach())
+                    ref = step_densities[..., -2] if self.compile_chunk_size > 1 else prev_density
+                    avg = scatter_mean(
+                        torch.abs(charge_density - ref).mean(-1), batch, dim=-1, dim_size=num_graphs
+                    )
+                    q = scatter_sum(charge_density[:, 0], batch, dim=-1, dim_size=num_graphs)
+                    status = scf_stop_status(
+                        avg, q, total_charge, self.scf_tolerance, self.constant_charge
+                    )
+                    if status is not None:
+                        if self.constant_charge:
+                            fermi_level = fermi_pre_update
+                        break
+            if self.adaptive:
+                status = status or "max_steps_reached"
 
             (
                 energy,
@@ -1533,10 +1591,15 @@ class CompiledFixedPointEvaluator:
             retain_graph=False,
             create_graph=False,
         )[0]
-        charges_history = density_coefficients.unsqueeze(-1).expand(
-            *density_coefficients.shape,
-            self.num_scf_steps,
-        )
+        if self.adaptive:
+            charges_history = torch.cat(history, dim=-1)
+            result_extra = {
+                "scf_status": status,
+                "num_scf_steps_taken": charges_history.shape[-1] - 1,
+            }
+        else:
+            charges_history = density_coefficients.unsqueeze(-1).expand(*density_coefficients.shape, self.num_scf_steps)
+            result_extra = {}
         return {
             "energy": energy,
             "forces": forces,
@@ -1553,6 +1616,7 @@ class CompiledFixedPointEvaluator:
             "esps": None,
             "esps_dft": None,
             "polarizability": None,
+            **result_extra,
         }
 
 
@@ -1569,6 +1633,8 @@ def build_compiled_fixed_point_evaluator(
     enabled: bool = True,
     scope: str = "scf",
     chunk_size: int = 1,
+    adaptive: bool = False,
+    scf_tolerance: float = 1e-6,
 ) -> CompiledFixedPointEvaluator:
     compile_options = None
     if enabled:
@@ -1587,4 +1653,6 @@ def build_compiled_fixed_point_evaluator(
         mixing_parameter=mixing_parameter,
         constant_charge=constant_charge,
         compile_options=compile_options,
+        adaptive=adaptive,
+        scf_tolerance=scf_tolerance,
     )
