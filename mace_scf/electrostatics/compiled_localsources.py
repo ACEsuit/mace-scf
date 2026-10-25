@@ -9,7 +9,7 @@ from graph_longrange.utils import permute_to_e3nn_convention
 
 from .compiled_kspace import KSpacePlanner
 from .localsources import LocalSplitCharges, LocalCharges
-from .utils import compute_polarization
+from .utils import compute_polarization, radial_features
 
 try:
     _dynamo_disable = torch.compiler.disable
@@ -67,7 +67,7 @@ class LocalSplitChargesCompiledCore(torch.nn.Module):
         positions: torch.Tensor,
         edge_index: torch.Tensor,
         shifts: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         vectors, lengths = get_edge_vectors_and_lengths(
             positions=positions,
             edge_index=edge_index,
@@ -77,14 +77,15 @@ class LocalSplitChargesCompiledCore(torch.nn.Module):
             self.spherical_harmonics,
             permute_to_e3nn_convention(vectors),
         )
-        edge_feats, _ = _call_module(
+        edge_feats, cutoff = _call_module(
+            radial_features,
             self.radial_embedding,
             lengths,
             node_attrs,
             edge_index,
             self.atomic_numbers,
         )
-        return vectors, lengths, edge_attrs, edge_feats
+        return vectors, lengths, edge_attrs, edge_feats, cutoff
 
     def _compute_atomic_base_energy(
         self,
@@ -138,6 +139,7 @@ class LocalSplitChargesCompiledCore(torch.nn.Module):
         node_feats: torch.Tensor,
         edge_attrs: torch.Tensor,
         edge_feats: torch.Tensor,
+        cutoff: torch.Tensor,
         edge_index: torch.Tensor,
         vectors: torch.Tensor,
         batch: torch.Tensor,
@@ -162,6 +164,7 @@ class LocalSplitChargesCompiledCore(torch.nn.Module):
                 edge_attrs=edge_attrs,
                 edge_feats=edge_feats,
                 edge_index=edge_index,
+                cutoff=cutoff,
             )
             node_feats = _call_module(
                 product,
@@ -190,7 +193,7 @@ class LocalSplitChargesCompiledCore(torch.nn.Module):
                 node_formal_charges=formal_charges,
                 node_feats=node_feats,
                 edge_attrs=edge_attrs,
-                edge_feats=edge_feats,
+                edge_feats=edge_feats * cutoff,
                 edge_index=edge_index,
                 edge_vectors=vectors,
                 batch=batch,
@@ -299,7 +302,7 @@ class LocalSplitChargesCompiledCore(torch.nn.Module):
         node_heads = head[batch]
 
         node_feats = _call_module(self.node_embedding, node_attrs)
-        vectors, lengths, edge_attrs, edge_feats = self._compute_geometry_features(
+        vectors, lengths, edge_attrs, edge_feats, cutoff = self._compute_geometry_features(
             node_attrs=node_attrs,
             positions=positions,
             edge_index=edge_index,
@@ -341,6 +344,7 @@ class LocalSplitChargesCompiledCore(torch.nn.Module):
             node_feats=node_feats,
             edge_attrs=edge_attrs,
             edge_feats=edge_feats,
+            cutoff=cutoff,
             edge_index=edge_index,
             vectors=vectors,
             batch=batch,
@@ -407,7 +411,7 @@ class LocalChargesCompiledCore(torch.nn.Module):
         positions: torch.Tensor,
         edge_index: torch.Tensor,
         shifts: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         vectors, lengths = get_edge_vectors_and_lengths(
             positions=positions,
             edge_index=edge_index,
@@ -417,14 +421,15 @@ class LocalChargesCompiledCore(torch.nn.Module):
             self.spherical_harmonics,
             permute_to_e3nn_convention(vectors),
         )
-        edge_feats, _ = _call_module(
+        edge_feats, cutoff = _call_module(
+            radial_features,
             self.radial_embedding,
             lengths,
             node_attrs,
             edge_index,
             self.atomic_numbers,
         )
-        return edge_attrs, edge_feats, lengths
+        return edge_attrs, edge_feats, lengths, cutoff
 
     def _compute_atomic_base_energy(
         self,
@@ -453,6 +458,7 @@ class LocalChargesCompiledCore(torch.nn.Module):
         node_feats: torch.Tensor,
         edge_attrs: torch.Tensor,
         edge_feats: torch.Tensor,
+        cutoff: torch.Tensor,
         edge_index: torch.Tensor,
         batch: torch.Tensor,
         num_graphs: int,
@@ -474,6 +480,7 @@ class LocalChargesCompiledCore(torch.nn.Module):
                 edge_attrs=edge_attrs,
                 edge_feats=edge_feats,
                 edge_index=edge_index,
+                cutoff=cutoff,
             )
             node_feats = _call_module(
                 product,
@@ -583,7 +590,7 @@ class LocalChargesCompiledCore(torch.nn.Module):
         node_heads = head[batch]
 
         node_feats = _call_module(self.node_embedding, node_attrs)
-        edge_attrs, edge_feats, _ = self._compute_geometry_features(
+        edge_attrs, edge_feats, _, cutoff = self._compute_geometry_features(
             node_attrs=node_attrs,
             positions=positions,
             edge_index=edge_index,
@@ -606,6 +613,7 @@ class LocalChargesCompiledCore(torch.nn.Module):
                 node_feats=node_feats,
                 edge_attrs=edge_attrs,
                 edge_feats=edge_feats,
+                cutoff=cutoff,
                 edge_index=edge_index,
                 batch=batch,
                 num_graphs=num_graphs,

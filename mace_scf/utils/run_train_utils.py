@@ -69,6 +69,7 @@ def build_model(
         MLP_irreps=o3.Irreps(args.MLP_irreps),
         radial_MLP=ast.literal_eval(args.radial_MLP),
         radial_type=args.radial_type,
+        apply_cutoff=args.apply_cutoff,
     )
 
     model: torch.nn.Module

@@ -14,6 +14,24 @@ from mace.modules.utils import (
 )
 
 
+def radial_features(
+    radial_embedding: torch.nn.Module,
+    lengths: torch.Tensor,
+    node_attrs: torch.Tensor,
+    edge_index: torch.Tensor,
+    atomic_numbers: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Radial edge features and the cutoff [n_edges, 1] that every edge block multiplies its output by.
+
+    If radial_embedding returns None for the cutoff, then we return a tensor of ones.
+    This is because the cutoff has already been applied to the radial edge features.
+    """
+    edge_feats, cutoff = radial_embedding(lengths, node_attrs, edge_index, atomic_numbers)
+    if cutoff is None:
+        cutoff = torch.ones_like(lengths)
+    return edge_feats, cutoff
+
+
 def get_change_of_basis() -> torch.Tensor:
     return CartesianTensor("ij=ji").reduced_tensor_products().change_of_basis
 

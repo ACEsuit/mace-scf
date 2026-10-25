@@ -13,13 +13,13 @@ from mace.modules.utils import (
 )
 
 from mace.modules import (
+    RadialEmbeddingBlock,
     AtomicEnergiesBlock,
     EquivariantProductBasisBlock,
     InteractionBlock,
     LinearNodeEmbeddingBlock,
     LinearReadoutBlock,
     NonLinearReadoutBlock,
-    RadialEmbeddingBlock,
 )
 
 from graph_longrange.energy import GTOElectrostaticEnergy
@@ -27,7 +27,7 @@ from graph_longrange.kspace import compute_k_vectors_flat
 from graph_longrange.gto_utils import gto_basis_kspace_cutoff
 from graph_longrange.utils import permute_to_e3nn_convention
 
-from .utils import compute_total_charge_dipole
+from .utils import compute_total_charge_dipole, radial_features
 
 
 class AutogradHardness(torch.nn.Module):
@@ -244,6 +244,7 @@ class MACEQEq(torch.nn.Module):
         read_hardness: bool = False,
         default_hardness: float = 2.0,
         qeq_charges: str = "autograd",
+        apply_cutoff: bool = True,
     ):
         super().__init__()
         self.register_buffer(
@@ -300,6 +301,7 @@ class MACEQEq(torch.nn.Module):
             num_bessel=num_bessel,
             num_polynomial_cutoff=num_polynomial_cutoff,
             radial_type=radial_type,
+            apply_cutoff=apply_cutoff,
         )
         edge_feats_irreps = o3.Irreps(f"{self.radial_embedding.out_dim}x0e")
 
@@ -481,8 +483,8 @@ class MACEQEq(torch.nn.Module):
             shifts=data["shifts"],
         )
         edge_attrs = self.spherical_harmonics(permute_to_e3nn_convention(vectors))
-        edge_feats, cutoff = self.radial_embedding(
-            lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
+        edge_feats, cutoff = radial_features(
+            self.radial_embedding, lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
         )
 
         energies = [e0]

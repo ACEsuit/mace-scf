@@ -10,6 +10,7 @@ from graph_longrange.utils import permute_to_e3nn_convention
 from .compiled_kspace import KSpacePlanner
 from .e3nn_compile_utils import replace_e3nn_script_codegen_with_fx
 from .fixed_point_core import FixedPointCore
+from .utils import radial_features
 
 try:
     _dynamo_disable = torch.compiler.disable
@@ -134,7 +135,7 @@ class FixedPointSCFCompiledCore(torch.nn.Module):
         positions: torch.Tensor,
         edge_index: torch.Tensor,
         shifts: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         vectors, lengths = get_edge_vectors_and_lengths(
             positions=positions,
             edge_index=edge_index,
@@ -144,14 +145,15 @@ class FixedPointSCFCompiledCore(torch.nn.Module):
             self.spherical_harmonics,
             permute_to_e3nn_convention(vectors),
         )
-        edge_feats, _ = _call_module(
+        edge_feats, cutoff = _call_module(
+            radial_features,
             self.radial_embedding,
             lengths,
             node_attrs,
             edge_index,
             self.atomic_numbers,
         )
-        return edge_attrs, edge_feats
+        return edge_attrs, edge_feats, cutoff
 
     def _compute_external_field_features(
         self,
@@ -261,7 +263,7 @@ class FixedPointSCFCompiledCore(torch.nn.Module):
         )
 
         node_feats = _call_module(self.node_embedding, node_attrs)
-        edge_attrs, edge_feats = self._compute_geometry_features(
+        edge_attrs, edge_feats, cutoff = self._compute_geometry_features(
             node_attrs=node_attrs,
             positions=positions,
             edge_index=edge_index,
@@ -289,6 +291,7 @@ class FixedPointSCFCompiledCore(torch.nn.Module):
                 edge_attrs=edge_attrs,
                 edge_feats=edge_feats,
                 edge_index=edge_index,
+                cutoff=cutoff,
             )
             node_feats = _call_module(
                 product,
@@ -340,7 +343,7 @@ class FixedPointSCFCompiledCore(torch.nn.Module):
             node_feats=node_feats,
             all_layer_feats=all_layer_feats,
             edge_attrs=edge_attrs,
-            edge_feats=edge_feats,
+            edge_feats=edge_feats * cutoff,  # cut already: the update blocks' edge MLPs see radial features only
             field_independent_charge_density=charge_density,
             energies=stacked_energies,
             electrostatics_plan=electrostatics_plan,

@@ -19,13 +19,13 @@ from graph_longrange.gto_utils import gto_basis_kspace_cutoff
 from graph_longrange.utils import permute_to_e3nn_convention
 
 from mace.modules import (
+    RadialEmbeddingBlock,
     AtomicEnergiesBlock,
     EquivariantProductBasisBlock,
     InteractionBlock,
     LinearNodeEmbeddingBlock,
     LinearReadoutBlock,
     NonLinearReadoutBlock,
-    RadialEmbeddingBlock,
 )
 from .bonded_blocks import (
     PerSpeciesFormalChargesBlock,
@@ -38,7 +38,12 @@ from .field_blocks import (
     LinearPolarizabilityReadoutBlock
 )
 
-from .utils import compute_total_charge_dipole, compute_polarization, get_outputs
+from .utils import (
+    compute_total_charge_dipole,
+    compute_polarization,
+    get_outputs,
+    radial_features,
+)
 
 
 class _LocalSourceModelBase(torch.nn.Module):
@@ -83,6 +88,7 @@ class _LocalSourceModelBase(torch.nn.Module):
         radial_type: Optional[str] = "bessel",
         heads: Optional[List[str]] = None,
         use_linear_final_readout: bool = False,
+        apply_cutoff: bool = True,
     ) -> None:
         self.register_buffer(
             "atomic_numbers", torch.tensor(atomic_numbers, dtype=torch.int64)
@@ -111,6 +117,7 @@ class _LocalSourceModelBase(torch.nn.Module):
             num_bessel=num_bessel,
             num_polynomial_cutoff=num_polynomial_cutoff,
             radial_type=radial_type,
+            apply_cutoff=apply_cutoff,
         )
         self.edge_feats_irreps = o3.Irreps(f"{self.radial_embedding.out_dim}x0e")
 
@@ -274,6 +281,7 @@ class LocalSplitCharges(_LocalSourceModelBase):
         heads: Optional[List[str]] = None,
         compute_polarizability: bool = False,
         use_linear_final_readout: bool = False,
+        apply_cutoff: bool = True,
     ):
         super().__init__()
         self._init_local_model(
@@ -296,6 +304,7 @@ class LocalSplitCharges(_LocalSourceModelBase):
             radial_type=radial_type,
             heads=heads,
             use_linear_final_readout=use_linear_final_readout,
+            apply_cutoff=apply_cutoff,
         )
 
         # embedding of oxidation states
@@ -417,8 +426,8 @@ class LocalSplitCharges(_LocalSourceModelBase):
             shifts=data["shifts"],
         )
         edge_attrs = self.spherical_harmonics(permute_to_e3nn_convention(vectors))
-        edge_feats, _ = self.radial_embedding(
-            lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
+        edge_feats, cutoff = radial_features(
+            self.radial_embedding, lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
         )
 
         if external_field is None:
@@ -458,6 +467,7 @@ class LocalSplitCharges(_LocalSourceModelBase):
                 edge_attrs=edge_attrs,
                 edge_feats=edge_feats,
                 edge_index=data["edge_index"],
+                cutoff=cutoff,
             )
             node_feats = product(
                 node_feats=node_feats,
@@ -478,7 +488,7 @@ class LocalSplitCharges(_LocalSourceModelBase):
                 node_formal_charges=FQ,
                 node_feats=node_feats,
                 edge_attrs=edge_attrs,
-                edge_feats=edge_feats,
+                edge_feats=edge_feats * cutoff,
                 edge_index=data["edge_index"],
                 edge_vectors=vectors,
                 batch=data["batch"],
@@ -602,6 +612,7 @@ class LocalCharges(_LocalSourceModelBase):
         include_electrostatic_self_interaction: bool = False,
         pbc_handling: str = "mixed_periodic",
         heads: Optional[List[str]] = None,
+        apply_cutoff: bool = True,
     ):
         super().__init__()
         self._init_local_model(
@@ -623,6 +634,7 @@ class LocalCharges(_LocalSourceModelBase):
             radial_MLP=radial_MLP,
             radial_type=radial_type,
             heads=heads,
+            apply_cutoff=apply_cutoff,
         )
 
         self.charges_irreps = o3.Irreps.spherical_harmonics(atomic_multipoles_max_l)
@@ -710,8 +722,8 @@ class LocalCharges(_LocalSourceModelBase):
             shifts=data["shifts"],
         )
         edge_attrs = self.spherical_harmonics(permute_to_e3nn_convention(vectors))
-        edge_feats, _ = self.radial_embedding(
-            lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
+        edge_feats, cutoff = radial_features(
+            self.radial_embedding, lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
         )
 
         if external_field is None:
@@ -737,6 +749,7 @@ class LocalCharges(_LocalSourceModelBase):
                 edge_attrs=edge_attrs,
                 edge_feats=edge_feats,
                 edge_index=data["edge_index"],
+                cutoff=cutoff,
             )
             node_feats = product(
                 node_feats=node_feats,
@@ -843,6 +856,7 @@ class FixedChargeBaselinedMACE(_LocalSourceModelBase):
         pbc_handling: str = "mixed_periodic",
         heads: Optional[List[str]] = None,
         use_linear_final_readout: bool = False,
+        apply_cutoff: bool = True,
     ):
         super().__init__()
         self._init_local_model(
@@ -865,6 +879,7 @@ class FixedChargeBaselinedMACE(_LocalSourceModelBase):
             radial_type=radial_type,
             heads=heads,
             use_linear_final_readout=use_linear_final_readout,
+            apply_cutoff=apply_cutoff,
         )
 
         # charge prediction
@@ -945,8 +960,8 @@ class FixedChargeBaselinedMACE(_LocalSourceModelBase):
             shifts=data["shifts"],
         )
         edge_attrs = self.spherical_harmonics(permute_to_e3nn_convention(vectors))
-        edge_feats, _ = self.radial_embedding(
-            lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
+        edge_feats, cutoff = radial_features(
+            self.radial_embedding, lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
         )
         if external_field is None:
             external_field = data["external_field"]
@@ -973,6 +988,7 @@ class FixedChargeBaselinedMACE(_LocalSourceModelBase):
                 edge_attrs=edge_attrs,
                 edge_feats=edge_feats,
                 edge_index=data["edge_index"],
+                cutoff=cutoff,
             )
             node_feats = product(
                 node_feats=node_feats,
