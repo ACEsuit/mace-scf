@@ -245,7 +245,7 @@ def load_train_valid_sets_from_xyz(args: argparse.Namespace,  config_type_weight
 
     # Atomic number table
     z_table = tools.get_atomic_number_table_from_zs(
-        z
+        int(z)
         for configs in (collections.train, collections.valid)
         for config in configs
         for z in config.atomic_numbers
